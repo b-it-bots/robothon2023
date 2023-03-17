@@ -1,0 +1,17 @@
+<?xml version="1.0"?>
+<package>
+  <name>robothon2023</name>
+  <version>0.1.0</version>
+  <description>Code for solving the Robothon 2023 tasks</description>
+  <maintainer email="b-it-bots@inf.-brs.de">b-it-bots</maintainer>
+
+  <license>GPLv3</license>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+  <build_depend>roscpp</build_depend>
+  <build_depend>pcl_ros</build_depend>
+  <build_depend>geometry_msgs</build_depend>
+  <build_depend>cv_bridge</build_depend>
+
+</package>

@@ -1,0 +1,9 @@
+target_frame: camera_link
+passthrough_x_min: 0.0
+passthrough_x_max: 0.8
+passthrough_y_min: -0.7
+passthrough_y_max: 0.7
+voxel_leaf_size: 0.01
+max_cluster_size: 5000
+min_cluster_size: 100
+cluster_tolerance: 0.02
