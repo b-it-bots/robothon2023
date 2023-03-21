@@ -215,7 +215,7 @@ void TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, const cv::M
     /**
      * 1. Mask blue and red using HSV filter
      * 2. Find circles on each mask
-     * 3. filter out circles by only considering two roughly equal circles next to each other [TODO]
+     * 3. filter out circles by only considering two roughly equal circles next to each other [partially done; TODO: check sizes of selected circles]
      * 4. get corresponding 3D positions of the circles [TODO]
      * 5. determine axis from the two points, and broadcast a transform for the origin of the board [TODO]
      */
@@ -230,35 +230,47 @@ void TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, const cv::M
     // the hue range wraps around 180
     // i.e. 170-180 and 0-10 are all red
     // TODO: parameterize this for easy tuning
-    cv::Scalar red_lower1(0, 35, 140);
-    cv::Scalar red_lower2(175, 35, 140);
+    cv::Scalar red_lower1(0, 100, 140);
+    cv::Scalar red_lower2(175, 100, 140);
     cv::Scalar red_upper1(5, 255, 255);
     cv::Scalar red_upper2(180, 255, 255);
     cv::inRange(hsv, red_lower1, red_upper1, red_mask1);
     cv::inRange(hsv, red_lower2, red_upper2, red_mask2);
     cv::bitwise_or(red_mask1, red_mask2, red_mask);
 
-    cv::Scalar blue_lower(90, 35, 140);
-    cv::Scalar blue_upper(110, 255, 255);
+    cv::Scalar blue_lower(85, 100, 140);
+    cv::Scalar blue_upper(120, 255, 255);
     cv::inRange(hsv, blue_lower, blue_upper, blue_mask);
 
     cv::blur(red_mask, red_mask, cv::Size(3,3));
     std::vector<cv::Vec3f> red_circles;
-    cv::HoughCircles(red_mask, red_circles, cv::HOUGH_GRADIENT, 1, 20, 50, 20, 1, 20);
-    for (size_t i = 0; i < red_circles.size(); i++)
-    {
-        cv::Vec3i circle = red_circles[i];
-        cv::circle(debug_image, cv::Point(circle[0], circle[1]), circle[2], cv::Scalar(0,255,0), 1, cv::LINE_AA);
-    }
+    cv::HoughCircles(red_mask, red_circles, cv::HOUGH_GRADIENT, 1, 20, 50, 10, 1, 40);
 
     cv::blur(blue_mask, blue_mask, cv::Size(3,3));
     std::vector<cv::Vec3f> blue_circles;
-    cv::HoughCircles(blue_mask, blue_circles, cv::HOUGH_GRADIENT, 1, 20, 50, 20, 1, 20);
-    for (size_t i = 0; i < blue_circles.size(); i++)
+    cv::HoughCircles(blue_mask, blue_circles, cv::HOUGH_GRADIENT, 1, 20, 50, 10, 1, 40);
+    if (!red_circles.empty() and !blue_circles.empty())
     {
-        cv::Vec3i circle = blue_circles[i];
-        cv::circle(debug_image, cv::Point(circle[0], circle[1]), circle[2], cv::Scalar(0,255,0), 1, cv::LINE_AA);
+        int min_red_idx = 0;
+        int min_blue_idx = 0;
+        double min_dist = 1000.0;
+        for (size_t i = 0; i < red_circles.size(); i++)
+        {
+            for (size_t j = 0; j < blue_circles.size(); j++)
+            {
+                double dist = cv::norm(cv::Point(red_circles[i][0], red_circles[i][1])- cv::Point(blue_circles[j][0], blue_circles[j][1]));
+                if (dist < min_dist)
+                {
+                    min_dist = dist;
+                    min_red_idx = i;
+                    min_blue_idx = j;
+                }
+            }
+        }
+        cv::circle(debug_image, cv::Point(red_circles[min_red_idx][0], red_circles[min_red_idx][1]), red_circles[min_red_idx][2], cv::Scalar(0,255,0), 1, cv::LINE_AA);
+        cv::circle(debug_image, cv::Point(blue_circles[min_blue_idx][0], blue_circles[min_blue_idx][1]), blue_circles[min_blue_idx][2], cv::Scalar(0,255,0), 1, cv::LINE_AA);
     }
+
     sensor_msgs::ImagePtr img_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", debug_image).toImageMsg();
     img_msg->header.stamp = ros::Time::now();
     img_msg->header.frame_id = frame_id;
