@@ -6,6 +6,9 @@
 #include <sensor_msgs/Image.h>
 #include <geometry_msgs/PolygonStamped.h>
 #include <tf/transform_listener.h>
+#include <tf2/LinearMath/Quaternion.h>
+#include <tf2_ros/transform_broadcaster.h>
+#include <geometry_msgs/TransformStamped.h>
 
 #include <cv_bridge/cv_bridge.h>
 
@@ -53,6 +56,7 @@ private:
     ros::Publisher pose_publisher;
     ros::Publisher image_publisher;
     boost::shared_ptr<tf::TransformListener> tf_listener;
+    tf2_ros::TransformBroadcaster tf_broadcaster;
     std::string target_frame;
 
     double passthrough_x_min;
@@ -87,11 +91,16 @@ private:
     /**
      * find blue and red buttons in 2D and 3D, and determine orientation of the board
      */
-    void findBoardOrigin(PointCloud::Ptr &full_cloud, const cv::Mat &image, const std::string &frame_id);
+    bool findBoardOrigin(PointCloud::Ptr &full_cloud, const cv::Mat &image, const std::string &img_frame_id, const std::string &pc_frame_id);
     /**
      * find top plane of the task board in 3D
      */
     bool findBoardPlane(PointCloud::Ptr &full_cloud, const std::string &frame_id);
+
+    /**
+     * get 3D points of a circle defined in 2D
+     */
+    PointCloud::Ptr get3DPointsInCircle(const PointCloud::Ptr &full_cloud, const cv::Vec3f &circle);
 };
 
 #endif

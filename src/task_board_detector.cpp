@@ -83,7 +83,7 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
         ROS_DEBUG_STREAM("Found task board!");
     }
 
-    findBoardOrigin(full_cloud, img, image->header.frame_id);
+    bool origin_success = findBoardOrigin(full_cloud, img, image->header.frame_id, cloud_in_transformed.header.frame_id);
 
 }
 
@@ -210,14 +210,14 @@ bool TaskBoardDetector::findBoardPlane(PointCloud::Ptr &full_cloud, const std::s
 /**
  * find blue and red buttons in 2D and 3D, and determine orientation of the board
  */
-void TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, const cv::Mat &image, const std::string &frame_id)
+bool TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, const cv::Mat &image, const std::string &img_frame_id, const std::string &pc_frame_id)
 {
     /**
      * 1. Mask blue and red using HSV filter
      * 2. Find circles on each mask
      * 3. filter out circles by only considering two roughly equal circles next to each other [partially done; TODO: check sizes of selected circles]
-     * 4. get corresponding 3D positions of the circles [TODO]
-     * 5. determine axis from the two points, and broadcast a transform for the origin of the board [TODO]
+     * 4. get corresponding 3D positions of the circles
+     * 5. determine axis from the two points, and broadcast a transform for the origin of the board
      */
     cv::Mat debug_image = image.clone();
 
@@ -249,33 +249,103 @@ void TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, const cv::M
     cv::blur(blue_mask, blue_mask, cv::Size(3,3));
     std::vector<cv::Vec3f> blue_circles;
     cv::HoughCircles(blue_mask, blue_circles, cv::HOUGH_GRADIENT, 1, 20, 50, 10, 1, 40);
-    if (!red_circles.empty() and !blue_circles.empty())
+
+    if (red_circles.empty() or blue_circles.empty())
     {
-        int min_red_idx = 0;
-        int min_blue_idx = 0;
-        double min_dist = 1000.0;
-        for (size_t i = 0; i < red_circles.size(); i++)
+        sensor_msgs::ImagePtr img_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", debug_image).toImageMsg();
+        img_msg->header.stamp = ros::Time::now();
+        img_msg->header.frame_id = img_frame_id;
+        image_publisher.publish(img_msg);
+        return false;
+    }
+
+    int min_red_idx = 0;
+    int min_blue_idx = 0;
+    double min_dist = 1000.0;
+    for (size_t i = 0; i < red_circles.size(); i++)
+    {
+        for (size_t j = 0; j < blue_circles.size(); j++)
         {
-            for (size_t j = 0; j < blue_circles.size(); j++)
+            double dist = cv::norm(cv::Point(red_circles[i][0], red_circles[i][1])- cv::Point(blue_circles[j][0], blue_circles[j][1]));
+            if (dist < min_dist)
             {
-                double dist = cv::norm(cv::Point(red_circles[i][0], red_circles[i][1])- cv::Point(blue_circles[j][0], blue_circles[j][1]));
-                if (dist < min_dist)
-                {
-                    min_dist = dist;
-                    min_red_idx = i;
-                    min_blue_idx = j;
-                }
+                min_dist = dist;
+                min_red_idx = i;
+                min_blue_idx = j;
             }
         }
-        cv::circle(debug_image, cv::Point(red_circles[min_red_idx][0], red_circles[min_red_idx][1]), red_circles[min_red_idx][2], cv::Scalar(0,255,0), 1, cv::LINE_AA);
-        cv::circle(debug_image, cv::Point(blue_circles[min_blue_idx][0], blue_circles[min_blue_idx][1]), blue_circles[min_blue_idx][2], cv::Scalar(0,255,0), 1, cv::LINE_AA);
     }
+
+    cv::circle(debug_image, cv::Point(red_circles[min_red_idx][0], red_circles[min_red_idx][1]), red_circles[min_red_idx][2], cv::Scalar(0,255,0), 1, cv::LINE_AA);
+    cv::circle(debug_image, cv::Point(blue_circles[min_blue_idx][0], blue_circles[min_blue_idx][1]), blue_circles[min_blue_idx][2], cv::Scalar(0,255,0), 1, cv::LINE_AA);
+
+    cv::Vec3f selected_red_circle = red_circles[min_red_idx];
+    cv::Vec3f selected_blue_circle = blue_circles[min_blue_idx];
+
+    PointCloud::Ptr red_circle_3d = get3DPointsInCircle(full_cloud, selected_red_circle);
+    PointCloud::Ptr blue_circle_3d = get3DPointsInCircle(full_cloud, selected_blue_circle);
+
+    Eigen::Vector4f red_circle_center;
+    pcl::compute3DCentroid(*red_circle_3d, red_circle_center);
+
+    Eigen::Vector4f blue_circle_center;
+    pcl::compute3DCentroid(*blue_circle_3d, blue_circle_center);
+
+    double box_yaw = std::atan2((red_circle_center[1] - blue_circle_center[1]), (red_circle_center[0] - blue_circle_center[0]));
+
+    tf2::Quaternion q;
+    q.setRPY(0, 0, box_yaw);
+
+    geometry_msgs::TransformStamped circle_tf;
+
+    circle_tf.header.stamp = ros::Time::now();
+    circle_tf.header.frame_id = pc_frame_id;
+    circle_tf.child_frame_id = "board_link";
+    circle_tf.transform.translation.x = blue_circle_center[0];
+    circle_tf.transform.translation.y = blue_circle_center[1];
+    circle_tf.transform.translation.z = blue_circle_center[2];
+    circle_tf.transform.rotation.x = q.x();
+    circle_tf.transform.rotation.y = q.y();
+    circle_tf.transform.rotation.z = q.z();
+    circle_tf.transform.rotation.w = q.w();
+
+    tf_broadcaster.sendTransform(circle_tf);
+
 
     sensor_msgs::ImagePtr img_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", debug_image).toImageMsg();
     img_msg->header.stamp = ros::Time::now();
-    img_msg->header.frame_id = frame_id;
+    img_msg->header.frame_id = img_frame_id;
     image_publisher.publish(img_msg);
 
+    return true;
+
+}
+
+PointCloud::Ptr TaskBoardDetector::get3DPointsInCircle(const PointCloud::Ptr &full_cloud, const cv::Vec3f &circle)
+{
+    int width = full_cloud->width;
+    int height = full_cloud->height;
+    int grid_x_start = std::max(int(circle[0] - circle[2]), 0);
+    int grid_y_start = std::max(int(circle[1] - circle[2]), 0);
+    int grid_x_end = std::min(int(circle[0] + circle[2]), width);
+    int grid_y_end = std::min(int(circle[1] + circle[2]), height);
+    PointCloud::Ptr circle_cloud(new PointCloud);
+    for (int i = grid_x_start; i <= grid_x_end; i++)
+    {
+        for (int j = grid_y_start; j <= grid_y_end; j++)
+        {
+            double dist = cv::norm(cv::Point(i, j)- cv::Point(circle[0], circle[1]));
+            if (dist <= circle[2])
+            {
+                PointT point_3d = full_cloud->at(i, j);
+                circle_cloud->push_back(point_3d);
+            }
+        }
+    }
+    circle_cloud->is_dense = false;
+    std::vector<int> indices;
+    pcl::removeNaNFromPointCloud(*circle_cloud, *circle_cloud, indices);
+    return circle_cloud;
 }
 
 PointCloud::Ptr TaskBoardDetector::getPlane(const PointCloud::Ptr &full_cloud,

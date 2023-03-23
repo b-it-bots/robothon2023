@@ -10,6 +10,8 @@ find_package(catkin REQUIRED
     pcl_ros
     geometry_msgs
     cv_bridge
+    tf2
+    tf2_ros
 )
 find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)

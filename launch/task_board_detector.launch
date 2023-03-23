@@ -5,4 +5,9 @@
         <remap from="~input_pointcloud_topic" to="/camera/depth_registered/points" />
         <remap from="~input_image_topic" to="/camera/color/image_raw" />
     </node>
+    <node pkg="tf2_ros" type="static_transform_publisher" name="slider_start_pub" args="0.057 -0.035 0 0 0 0 1 board_link slider_start_link" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="slider_end_pub" args="0.045 0 0 0 0 0 1 slider_start_link slider_end_link" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="meter_plug_black_pub" args="0 -0.058 0 0 0 0 1 board_link meter_plug_black_link" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="meter_plug_red_pub" args="0.025 0 0 0 0 0 1 meter_plug_black_link meter_plug_red_link" />
+    <node pkg="tf2_ros" type="static_transform_publisher" name="door_knob_pub" args="0.005 -0.142 0 0 0 0 1 board_link door_knob_link" />
 </launch>
