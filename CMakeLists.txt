@@ -16,6 +16,7 @@ find_package(catkin REQUIRED
 find_package(PCL REQUIRED)
 find_package(OpenCV REQUIRED)
 
+catkin_python_setup()
 catkin_package()
 
 include_directories(
