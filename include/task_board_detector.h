@@ -4,6 +4,7 @@
 #include <ros/ros.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <sensor_msgs/Image.h>
+#include <sensor_msgs/CameraInfo.h>
 #include <geometry_msgs/PolygonStamped.h>
 #include <tf/transform_listener.h>
 #include <tf2/LinearMath/Quaternion.h>
@@ -55,9 +56,14 @@ private:
     ros::Publisher plane_polygon_publisher;
     ros::Publisher pose_publisher;
     ros::Publisher image_publisher;
+    ros::Subscriber camera_info_sub;
     boost::shared_ptr<tf::TransformListener> tf_listener;
     tf2_ros::TransformBroadcaster tf_broadcaster;
     std::string target_frame;
+    sensor_msgs::CameraInfoConstPtr camera_info;
+    bool received_camera_info;
+
+    geometry_msgs::TransformStamped circle_tf;
 
     double passthrough_x_min;
     double passthrough_x_max;
@@ -82,16 +88,17 @@ private:
                              pcl::ModelCoefficients::Ptr &coefficients,
                              pcl::PlanarPolygon<PointT>::Ptr &hull_polygon, PointCloud::Ptr &hull_pointcloud);
 
-    message_filters::Subscriber<sensor_msgs::Image> *image_sub_;
-    message_filters::Subscriber<sensor_msgs::PointCloud2> *cloud_sub_;
+    message_filters::Subscriber<sensor_msgs::Image> *image_sub;
+    message_filters::Subscriber<sensor_msgs::PointCloud2> *cloud_sub;
     typedef message_filters::sync_policies::ApproximateTime<sensor_msgs::Image, sensor_msgs::PointCloud2> msgSyncPolicy;
-    message_filters::Synchronizer<msgSyncPolicy> *msg_sync_;
+    message_filters::Synchronizer<msgSyncPolicy> *msg_sync;
     void synchronizeCallback(const sensor_msgs::ImageConstPtr &image,
                  const sensor_msgs::PointCloud2ConstPtr &cloud);
+    void cameraInfoCallback(const sensor_msgs::CameraInfoConstPtr &msg);
     /**
      * find blue and red buttons in 2D and 3D, and determine orientation of the board
      */
-    bool findBoardOrigin(PointCloud::Ptr &full_cloud, const cv::Mat &image, const std::string &img_frame_id, const std::string &pc_frame_id);
+    bool findBoardOrigin(PointCloud::Ptr &full_cloud, cv::Mat &debug_image, const std::string &img_frame_id, const std::string &pc_frame_id);
     /**
      * find top plane of the task board in 3D
      */
@@ -101,6 +108,21 @@ private:
      * get 3D points of a circle defined in 2D
      */
     PointCloud::Ptr get3DPointsInCircle(const PointCloud::Ptr &full_cloud, const cv::Vec3f &circle);
+
+    /**
+     * find slider position
+     */
+    bool findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat &debug_image, const cv::Point &start_point, const cv::Point &end_point, const std::string &pc_frame_id);
+
+    /**
+     * find door knob 
+     */
+    bool findDoorKnob(PointCloud::Ptr &full_cloud, cv::Mat &debug_image, const cv::Point &start_point, const std::string &pc_frame_id);
+
+    std::vector<cv::Point> getLargestContour(const cv::Mat &img);
+    void erode(cv::Mat &img);
+    void dilate(cv::Mat &img);
 };
+
 
 #endif

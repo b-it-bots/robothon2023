@@ -4,6 +4,7 @@
         <rosparam file="$(find robothon2023)/config/perception_params.yaml" command="load"/>
         <remap from="~input_pointcloud_topic" to="/camera/depth_registered/points" />
         <remap from="~input_image_topic" to="/camera/color/image_raw" />
+        <remap from="~camera_info_topic" to="/camera/color/camera_info" />
     </node>
     <node pkg="tf2_ros" type="static_transform_publisher" name="slider_start_pub" args="0.057 -0.035 0 0 0 0 1 board_link slider_start_link" />
     <node pkg="tf2_ros" type="static_transform_publisher" name="slider_end_pub" args="0.045 0 0 0 0 0 1 slider_start_link slider_end_link" />
