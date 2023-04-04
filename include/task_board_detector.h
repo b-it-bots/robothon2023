@@ -9,6 +9,7 @@
 #include <tf/transform_listener.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
+#include <tf2_ros/static_transform_broadcaster.h>
 #include <geometry_msgs/TransformStamped.h>
 
 #include <cv_bridge/cv_bridge.h>
@@ -56,9 +57,14 @@ private:
     ros::Publisher plane_polygon_publisher;
     ros::Publisher pose_publisher;
     ros::Publisher image_publisher;
+    ros::Publisher slider_pose_publisher;
+    ros::Publisher slider_start_pose_publisher;
+    ros::Publisher slider_end_pose_publisher;
+    ros::Publisher door_pose_publisher;
     ros::Subscriber camera_info_sub;
     boost::shared_ptr<tf::TransformListener> tf_listener;
     tf2_ros::TransformBroadcaster tf_broadcaster;
+    tf2_ros::StaticTransformBroadcaster static_tf_broadcaster;
     std::string target_frame;
     sensor_msgs::CameraInfoConstPtr camera_info;
     bool received_camera_info;

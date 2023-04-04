@@ -24,6 +24,10 @@ TaskBoardDetector::TaskBoardDetector(ros::NodeHandle &nh) : nh(nh), received_cam
     image_publisher = nh.advertise<sensor_msgs::Image>("debug_image", 1);
     plane_polygon_publisher = nh.advertise<geometry_msgs::PolygonStamped>("output_plane_polygon", 1);
     pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("object_pose", 1);
+    slider_pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("slider_pose", 1);
+    slider_start_pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("slider_start_pose", 1);
+    slider_end_pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("slider_end_pose", 1);
+    door_pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("door_pose", 1);
     camera_info_sub = nh.subscribe<sensor_msgs::CameraInfo>("camera_info_topic", 1, &TaskBoardDetector::cameraInfoCallback, this);
 
     image_sub = new message_filters::Subscriber<sensor_msgs::Image> (nh, "input_image_topic", 1);
@@ -105,7 +109,6 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
     img_msg->header.stamp = ros::Time::now();
     img_msg->header.frame_id = image->header.frame_id;
     image_publisher.publish(img_msg);
-    /*
     if (origin_success and tf_listener->frameExists("board_link"))
     {
         ros::Time common_time;
@@ -126,7 +129,15 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
         slider_pos.point.x = 0.057;
         slider_pos.point.y = -0.035;
         slider_pos.point.z = 0.0;
-        tf_listener->transformPoint(cloud_in->header.frame_id, slider_pos, slider_pos);
+        try
+        {
+            tf_listener->transformPoint(cloud_in->header.frame_id, slider_pos, slider_pos);
+        }
+        catch (tf::TransformException &ex)
+        {
+            ROS_ERROR("PCL transform error: %s", ex.what());
+            return;
+        }
         double start_u = ((camera_info->K[0] * slider_pos.point.x) + (camera_info->K[2] * slider_pos.point.z)) / slider_pos.point.z;
         double start_v = ((camera_info->K[4] * slider_pos.point.y) + (camera_info->K[5] * slider_pos.point.z)) / slider_pos.point.z;
 
@@ -139,7 +150,8 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
         double end_u = ((camera_info->K[0] * slider_pos.point.x) + (camera_info->K[2] * slider_pos.point.z)) / slider_pos.point.z;
         double end_v = ((camera_info->K[4] * slider_pos.point.y) + (camera_info->K[5] * slider_pos.point.z)) / slider_pos.point.z;
 
-        ROS_INFO_STREAM(start_u << ", " << start_v << ", " << end_u << ", " << end_v);
+       // ROS_INFO_STREAM(start_u << ", " << start_v << ", " << end_u << ", " << end_v);
+        bool slider_success = findSliderPosition(full_cloud, img, cv::Point(start_u, start_v), cv::Point(end_u, end_v), cloud_in_transformed.header.frame_id);
 
         geometry_msgs::PointStamped door_knob;
         door_knob.header.stamp = common_time;
@@ -147,12 +159,19 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
         door_knob.point.x = 0.005;
         door_knob.point.y = -0.142;
         door_knob.point.z = 0.0;
-        tf_listener->transformPoint(cloud_in->header.frame_id, door_knob, door_knob);
+        try
+        {
+            tf_listener->transformPoint(cloud_in->header.frame_id, door_knob, door_knob);
+        }
+        catch (tf::TransformException &ex)
+        {
+            ROS_ERROR("PCL transform error: %s", ex.what());
+            return;
+        }
         double door_u = ((camera_info->K[0] * door_knob.point.x) + (camera_info->K[2] * door_knob.point.z)) / door_knob.point.z;
         double door_v = ((camera_info->K[4] * door_knob.point.y) + (camera_info->K[5] * door_knob.point.z)) / door_knob.point.z;
         ROS_INFO_STREAM("Door: " << door_u << ", " << door_v);
 
-        bool slider_success = findSliderPosition(full_cloud, img, cv::Point(start_u, start_v), cv::Point(end_u, end_v), cloud_in_transformed.header.frame_id);
 
         bool door_success = findDoorKnob(full_cloud, img, cv::Point(door_u, door_v), cloud_in_transformed.header.frame_id);
 
@@ -162,7 +181,6 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
         image_publisher.publish(img_msg);
 
     }
-    */
     //bool slider_success = findSliderPosition(full_cloud, img, cv::Point(941, 497), cv::Point(1053, 548), cloud_in_transformed.header.frame_id);
 }
 
@@ -336,13 +354,12 @@ bool TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, cv::Mat &de
     cv::findContours(red_mask, contours, hierarchy, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE);
     cv::drawContours(red_mask, contours, -1, cv::Scalar(255, 255, 255), cv::FILLED);
 
+    /*
     cv::imshow("red_mask", red_mask);
     cv::imshow("blue_mask", blue_mask);
     cv::waitKey(10);
 
-//    cv::Mat red_and_blue_mask;
-////    cv::bitwise_and(red_mask, blue_mask, red_and_blue_mask);
-//    cv::bitwise_or(red_mask, red_and_blue_mask, red_mask);
+    */
 
     cv::blur(blue_mask, blue_mask, cv::Size(3,3));
     std::vector<cv::Vec3f> blue_circles;
@@ -415,7 +432,7 @@ bool TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, cv::Mat &de
     circle_tf.transform.rotation.z = q.z();
     circle_tf.transform.rotation.w = q.w();
 
-    tf_broadcaster.sendTransform(circle_tf);
+    static_tf_broadcaster.sendTransform(circle_tf);
 
     return true;
 
@@ -472,6 +489,8 @@ bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat 
     cv::Canny(slider_roi, slider_edges, 100, 200, 3);
     dilate(slider_edges);
     erode(slider_edges);
+//    cv::imshow("edges", slider_edges);
+//    cv::waitKey(10);
     std::vector<cv::Point> largest_contour = getLargestContour(slider_edges);
     if (largest_contour.empty())
     {
@@ -480,6 +499,7 @@ bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat 
     }
     cv::RotatedRect min_area_rect = cv::minAreaRect(largest_contour);
     cv::Point2f rotation_center((slider_roi.cols/2.), (slider_roi.rows/2.));
+    min_area_rect.angle += 90.0;
     ROS_INFO_STREAM("Angle: " << min_area_rect.angle);
     cv::Mat rotation_matrix = cv::getRotationMatrix2D(rotation_center, min_area_rect.angle, 1.0);
     cv::Mat inv_rotation_matrix = cv::getRotationMatrix2D(rotation_center, -(min_area_rect.angle), 1.0);
@@ -496,6 +516,8 @@ bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat 
         ROS_ERROR_STREAM(bounding_rect.x << ", " << bounding_rect.y << ", " << bounding_rect.width << ", " << bounding_rect.height << ", " << slider_roi_rot.cols << ", " << slider_roi_rot.rows);
         return false;
     }
+//    cv::imshow("im", slider_roi_rot);
+//    cv::waitKey(10);
 
     cv::Mat slider_roi_rot_roi(slider_roi_rot, bounding_rect);
     cv::Rect center_slice(0, static_cast<int>((float)slider_roi_rot_roi.rows / 2) - 1, slider_roi_rot_roi.cols, 3);
@@ -513,6 +535,7 @@ bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat 
     cv::Point max_loc;
     cv::minMaxLoc(result, &min_val, &max_val, &min_loc, &max_loc, cv::Mat());
 
+    // start transforming back to original image
     max_loc.x += 15;
     max_loc.y = static_cast<int>((float)slider_roi_rot_roi.rows / 2);
     max_loc.x += bounding_rect.x;
@@ -523,7 +546,95 @@ bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat 
     cv::transform(pts, pts, inv_rotation_matrix);
     pts[0].x += min_x;
     pts[0].y += min_y;
+    // end transforming back to original image
+    
     cv::circle(debug_image, pts[0], 5, cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
+
+    cv::Vec3f slider_circle;
+    cv::Vec3f slider_start_circle;
+    cv::Vec3f slider_end_circle;
+    slider_circle[0] = pts[0].x;
+    slider_circle[1] = pts[0].y;
+    slider_circle[2] = 5.0;
+
+
+    cv::Point start_pos_cv(0, static_cast<int>((float)slider_roi_rot_roi.rows / 2));
+    start_pos_cv.x += bounding_rect.x;
+    start_pos_cv.y += bounding_rect.y;
+    pts[0] = static_cast<cv::Point2f>(start_pos_cv);
+    cv::transform(pts, pts, inv_rotation_matrix);
+    pts[0].x += min_x;
+    pts[0].y += min_y;
+
+    slider_start_circle[0] = pts[0].x;
+    slider_start_circle[1] = pts[0].y;
+    slider_start_circle[2] = 5.0;
+
+    cv::Point end_pos_cv(slider_roi_rot_roi.cols - 1, static_cast<int>((float)slider_roi_rot_roi.rows / 2));
+    end_pos_cv.x += bounding_rect.x;
+    end_pos_cv.y += bounding_rect.y;
+    pts[0] = static_cast<cv::Point2f>(end_pos_cv);
+    cv::transform(pts, pts, inv_rotation_matrix);
+    pts[0].x += min_x;
+    pts[0].y += min_y;
+
+    slider_end_circle[0] = pts[0].x;
+    slider_end_circle[1] = pts[0].y;
+    slider_end_circle[2] = 5.0;
+
+
+
+    PointCloud::Ptr slider_pc = get3DPointsInCircle(full_cloud, slider_circle);
+    PointCloud::Ptr slider_start_pc = get3DPointsInCircle(full_cloud, slider_start_circle);
+    PointCloud::Ptr slider_end_pc = get3DPointsInCircle(full_cloud, slider_end_circle);
+
+    Eigen::Vector4f slider_pos;
+    pcl::compute3DCentroid(*slider_pc, slider_pos);
+
+    Eigen::Vector4f slider_start_pos;
+    pcl::compute3DCentroid(*slider_start_pc, slider_start_pos);
+
+    Eigen::Vector4f slider_end_pos;
+    pcl::compute3DCentroid(*slider_end_pc, slider_end_pos);
+
+    double box_yaw = std::atan2((slider_start_pos[1] - slider_end_pos[1]), (slider_start_pos[0] - slider_end_pos[0]));
+    tf2::Quaternion q;
+    q.setRPY(0, 0, box_yaw);
+
+    geometry_msgs::PoseStamped pose;
+    pose.header.frame_id = pc_frame_id;
+    pose.header.stamp = ros::Time::now();
+    pose.pose.position.x = slider_pos[0];
+    pose.pose.position.y = slider_pos[1];
+    pose.pose.position.z = slider_pos[2];
+    pose.pose.orientation.x = q.x();
+    pose.pose.orientation.y = q.y();
+    pose.pose.orientation.z = q.z();
+    pose.pose.orientation.w = q.w();
+    slider_pose_publisher.publish(pose);
+
+    pose.header.frame_id = pc_frame_id;
+    pose.header.stamp = ros::Time::now();
+    pose.pose.position.x = slider_start_pos[0];
+    pose.pose.position.y = slider_start_pos[1];
+    pose.pose.position.z = slider_start_pos[2];
+    pose.pose.orientation.x = q.x();
+    pose.pose.orientation.y = q.y();
+    pose.pose.orientation.z = q.z();
+    pose.pose.orientation.w = q.w();
+    slider_start_pose_publisher.publish(pose);
+
+    pose.header.frame_id = pc_frame_id;
+    pose.header.stamp = ros::Time::now();
+    pose.pose.position.x = slider_end_pos[0];
+    pose.pose.position.y = slider_end_pos[1];
+    pose.pose.position.z = slider_end_pos[2];
+    pose.pose.orientation.x = q.x();
+    pose.pose.orientation.y = q.y();
+    pose.pose.orientation.z = q.z();
+    pose.pose.orientation.w = q.w();
+    slider_end_pose_publisher.publish(pose);
+
 
     //cv::imshow("igm", debug_image);
     //cv::waitKey(10);
@@ -561,7 +672,21 @@ bool TaskBoardDetector::findDoorKnob(PointCloud::Ptr &full_cloud, cv::Mat &debug
         ROS_ERROR_STREAM("Can't find door knob");
         return false;
     }
-    cv::circle(debug_image, cv::Point(circles[0][0], circles[0][1]), circles[0][2], cv::Scalar(0,255,0), 2, cv::LINE_AA);
+    circles[0][0] += min_x;
+    circles[0][1] += min_y;
+    cv::circle(debug_image, cv::Point(circles[0][0], circles[0][1]), circles[0][2], cv::Scalar(0,255,255), 2, cv::LINE_AA);
+    PointCloud::Ptr door_pc = get3DPointsInCircle(full_cloud, circles[0]);
+    Eigen::Vector4f door_pos;
+    pcl::compute3DCentroid(*door_pc, door_pos);
+
+    geometry_msgs::PoseStamped pose;
+    pose.header.frame_id = pc_frame_id;
+    pose.header.stamp = ros::Time::now();
+    pose.pose.position.x = door_pos[0];
+    pose.pose.position.y = door_pos[1];
+    pose.pose.position.z = door_pos[2];
+    pose.pose.orientation.w = 1.0;
+    door_pose_publisher.publish(pose);
 
     return true;
 }
