@@ -9,6 +9,8 @@ import math
 from geometry_msgs.msg import PoseStamped, Quaternion
 from std_msgs.msg import String
 from robothon2023.full_arm_movement import FullArmMovement
+import kortex_driver.msg
+import numpy as np
 
 class PickAndPlace(object):
 
@@ -35,28 +37,72 @@ class PickAndPlace(object):
         self.event_out_pub = rospy.Publisher('~event_out', String, queue_size=1)
         self.debug_pose_pub = rospy.Publisher('~debug_pose', PoseStamped, queue_size=1)
 
+        self.base_feedback_sub = rospy.Subscriber('/my_gen3/base_feedback', kortex_driver.msg.BaseCyclic_Feedback, self.base_feedback_cb)
+        self.cart_vel_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
+        self.loop_rate = rospy.Rate(10.0)
+        self.current_force_z = []
+
         self.setup_arm_for_pick()
         rospy.sleep(3.0)
         rospy.loginfo("READY!")
         rospy.sleep(3.0)
         rospy.loginfo("READY!")
 
+    def base_feedback_cb(self, msg):
+        self.current_force_z.append(msg.base.tool_external_wrench_force_z)
+        if len(self.current_force_z) > 25:
+            self.current_force_z.pop(0)
+
     def test_go_to_board(self):
+        pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.1)
         msg = PoseStamped()
         msg.header.frame_id = 'board_link' #board link is the name of tf
         msg.header.stamp = rospy.Time.now()
         #make the z axis (blux in rviz) face below  by rotating around x axis
-        q = list(tf.transformations.quaternion_from_euler(3.14, 0.0, 0.0))
+        q = list(tf.transformations.quaternion_from_euler(math.pi, 0.0, math.pi/2))
         msg.pose.orientation = Quaternion(*q)
-        msg.pose.position.z += 0.2
+        msg.pose.position.z += pre_height_above_button
+        # either because of a camera calibration offset or something to do with the reference frame for sending Cartesian poses
+#        msg.pose.position.x += 0.01
         # Creating a zero pose of the baord link and trasnforming it with respect to base link
         msg = self.get_transformed_pose(msg, 'base_link')
         print (msg)
         debug_pose = copy.deepcopy(msg)
         self.debug_pose_pub.publish(debug_pose)
         self.fam.send_cartesian_pose(debug_pose)
-        
-        
+
+    def test_press_button(self):
+        linear_vel_z = rospy.get_param("~linear_vel_z", 0.005)
+        force_z_diff_threshold = rospy.get_param("~force_z_diff_threshold", 3.0)
+        stop = False
+        self.current_force_z = []
+        num_retries = 0
+        while not rospy.is_shutdown():
+            if len(self.current_force_z) < 20:
+                num_retries += 1
+                if num_retries > 100:
+                    rospy.logerr("No force measurements received")
+                    break
+                self.loop_rate.sleep()
+                continue
+            msg = kortex_driver.msg.TwistCommand()
+            msg.twist.linear_z = -linear_vel_z
+            if abs(np.mean(self.current_force_z) - self.current_force_z[-1]) > force_z_diff_threshold:
+                stop = True
+                msg.twist.linear_z = 0.0
+            self.cart_vel_pub.publish(msg)
+            if stop:
+                break
+            self.loop_rate.sleep()
+        msg = kortex_driver.msg.TwistCommand()
+        msg.twist.linear_z = linear_vel_z
+        for idx in range(5):
+            self.cart_vel_pub.publish(msg)
+            self.loop_rate.sleep()
+        msg.twist.linear_z = 0.0
+        self.cart_vel_pub.publish(msg)
+        self.loop_rate.sleep()
+
 
     def perception_pose_cb(self, msg):
         msg = self.get_transformed_pose(msg, 'base_footprint')
@@ -165,8 +211,8 @@ class PickAndPlace(object):
         print (self.joint_angles['perceive_table'])
         self.fam.example_send_joint_angles(self.joint_angles["perceive_table"])
         self.fam.example_send_gripper_command(0.0) #Open the gripper 
-        self.fam.example_send_gripper_command(0.5) #half close the gripper 
-        #self.fam.example_send_gripper_command(0.9) #full close the gripper 
+        #self.fam.example_send_gripper_command(0.5) #half close the gripper 
+        self.fam.example_send_gripper_command(0.9) #full close the gripper 
         rospy.sleep(2.0)
 
     def get_transformed_pose(self, reference_pose, target_frame):
@@ -223,5 +269,6 @@ if __name__ == "__main__":
     rospy.init_node('pick_and_place')
     PAP = PickAndPlace()
     PAP.test_go_to_board()
+    PAP.test_press_button()
     rospy.spin()
 

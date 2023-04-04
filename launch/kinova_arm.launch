@@ -14,6 +14,7 @@
     <node pkg="robothon2023" type="pick_and_place.py" name="pick_and_place" output="screen">
         <rosparam command="load" file="$(find robothon2023)/config/joint_angles.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/boundary_safety.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/task_params.yaml"/>
         <remap from="~pose_in" to="$(arg pose_input)" />
     </node>
 </launch>
