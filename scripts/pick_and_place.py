@@ -52,28 +52,28 @@ class PickAndPlace(object):
         rospy.sleep(3.0)
         rospy.loginfo("READY!")
     
-    def traverse_waypoints(self, x, y, z):
+    def traverse_waypoints(self, waypoints):
+        '''
+        waypoints: list of waypoints to traverse.\n
+        each waypoint is a list of 6 floats: [x, y, z, roll, pitch, yaw].\n
+        angles are in degrees.
+        '''
+
         # move the arm through the waypoints
         feedback = rospy.wait_for_message("/" + self.fam.robot_name + "/base_feedback", BaseCyclic_Feedback)
 
-        client = actionlib.SimpleActionClient('/' + self.fam.robot_name + '/cartesian_trajectory_controller/follow_cartesian_trajectory', kortex_driver.msg.FollowCartesianTrajectoryAction)
+        client = actionlib.SimpleActionClient('/' + self.fam.robot_name + '/cartesian_trajectory_controller/follow_cartesian_trajectory', 
+                                              kortex_driver.msg.FollowCartesianTrajectoryAction)
 
         client.wait_for_server()
 
         goal = FollowCartesianTrajectoryGoal()
 
         # create waypoints
-        for i in range(0, len(x)):
-            goal.trajectory.append(
-                self.FillCartesianWaypoint(
-                    x[i],
-                    y[i],
-                    z,
-                    math.radians(feedback.base.commanded_tool_pose_theta_x),
-                    math.radians(feedback.base.commanded_tool_pose_theta_y),
-                    math.radians(feedback.base.commanded_tool_pose_theta_z)
-                )
-            )
+        for waypoint in waypoints:
+            goal.trajectory.append(self.FillCartesianWaypoint(waypoint[0], waypoint[1], waypoint[2],
+                                                                math.radians(waypoint[3]), math.radians(waypoint[4]), math.radians(waypoint[5]), 0.0))
+            
         
         goal.use_optimal_blending = True
 
@@ -101,6 +101,71 @@ class PickAndPlace(object):
         cartesianWaypoint.blending_radius = blending_radius
        
         return cartesianWaypoint
+
+    def generate_point_to_point_waypoints(self, target_pose: PoseStamped):
+        '''
+        input: target pose in base frame\n
+
+        generate waypoints for point to point motion to avoid collisions
+        '''
+
+        # generate waypoints for point to point motion
+        waypoints = []
+        
+        feedback = rospy.wait_for_message("/" + self.fam.robot_name + "/base_feedback", BaseCyclic_Feedback)
+
+        # convert the target pose quaternion to euler angles
+        target_pose_euler = tf.transformations.euler_from_quaternion(
+            [
+                target_pose.pose.orientation.x,
+                target_pose.pose.orientation.y,
+                target_pose.pose.orientation.z,
+                target_pose.pose.orientation.w
+            ]
+        )
+
+        waypoints.append(
+            feedback.base.commanded_tool_pose_x,
+            feedback.base.commanded_tool_pose_y,
+            feedback.base.commanded_tool_pose_z + 0.05,
+            feedback.base.commanded_tool_pose_theta_x,
+            feedback.base.commanded_tool_pose_theta_y,
+            feedback.base.commanded_tool_pose_theta_z
+        )
+
+        waypoints.append(
+            target_pose.pose.position.x,
+            target_pose.pose.position.y,
+            target_pose.pose.position.z + 0.05,
+            target_pose_euler[0],
+            target_pose_euler[1],
+            target_pose_euler[2]
+        )
+
+        waypoints.append(
+            target_pose.pose.position.x,
+            target_pose.pose.position.y,
+            target_pose.pose.position.z,
+            target_pose_euler[0],
+            target_pose_euler[1],
+            target_pose_euler[2]
+        )
+
+        return waypoints
+    
+    def get_pose_from_link(self, link_name: str):
+        '''
+        input: link_name\n
+        output: PoseStamped\n
+        returns the pose of the link in the base_link frame
+        '''
+
+        msg = PoseStamped()
+        msg.header.frame_id = link_name
+        msg.header.stamp = rospy.Time.now()
+        msg = self.get_transformed_pose(msg, 'base_link')
+
+        return msg
 
     def base_feedback_cb(self, msg):
         self.current_force_z.append(msg.base.tool_external_wrench_force_z)
