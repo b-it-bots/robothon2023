@@ -11,6 +11,9 @@ from std_msgs.msg import String
 from robothon2023.full_arm_movement import FullArmMovement
 import kortex_driver.msg
 import numpy as np
+from kortex_driver.srv import *
+from kortex_driver.msg import *
+import actionlib
 
 class PickAndPlace(object):
 
@@ -20,6 +23,7 @@ class PickAndPlace(object):
         self.fam = FullArmMovement()
         self.boundary_safety = rospy.get_param("~boundary_safety", None)
         self.joint_angles = rospy.get_param("~joint_angles", None)
+        self.trajectories = rospy.get_param("~trajectories", None)
         if self.boundary_safety is None or self.joint_angles is None:
             rospy.logerr("Joint angles or boundary_safety not defined.")
             sys.exit(1)
@@ -47,6 +51,56 @@ class PickAndPlace(object):
         rospy.loginfo("READY!")
         rospy.sleep(3.0)
         rospy.loginfo("READY!")
+    
+    def traverse_waypoints(self, x, y, z):
+        # move the arm through the waypoints
+        feedback = rospy.wait_for_message("/" + self.fam.robot_name + "/base_feedback", BaseCyclic_Feedback)
+
+        client = actionlib.SimpleActionClient('/' + self.fam.robot_name + '/cartesian_trajectory_controller/follow_cartesian_trajectory', kortex_driver.msg.FollowCartesianTrajectoryAction)
+
+        client.wait_for_server()
+
+        goal = FollowCartesianTrajectoryGoal()
+
+        # create waypoints
+        for i in range(0, len(x)):
+            goal.trajectory.append(
+                self.FillCartesianWaypoint(
+                    x[i],
+                    y[i],
+                    z,
+                    math.radians(feedback.base.commanded_tool_pose_theta_x),
+                    math.radians(feedback.base.commanded_tool_pose_theta_y),
+                    math.radians(feedback.base.commanded_tool_pose_theta_z)
+                )
+            )
+        
+        goal.use_optimal_blending = True
+
+        # Call the service
+        rospy.loginfo("Sending goal(Cartesian waypoint) to action server...")
+        try:
+            client.send_goal(goal)
+        except rospy.ServiceException:
+            rospy.logerr("Failed to send goal.")
+            return False
+        else:
+            client.wait_for_result()
+            return True
+
+    def FillCartesianWaypoint(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius):
+        cartesianWaypoint = CartesianWaypoint()
+
+        cartesianWaypoint.pose.x = new_x
+        cartesianWaypoint.pose.y = new_y
+        cartesianWaypoint.pose.z = new_z
+        cartesianWaypoint.pose.theta_x = new_theta_x
+        cartesianWaypoint.pose.theta_y = new_theta_y
+        cartesianWaypoint.pose.theta_z = new_theta_z
+        cartesianWaypoint.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_BASE
+        cartesianWaypoint.blending_radius = blending_radius
+       
+        return cartesianWaypoint
 
     def base_feedback_cb(self, msg):
         self.current_force_z.append(msg.base.tool_external_wrench_force_z)
