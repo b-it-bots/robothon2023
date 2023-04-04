@@ -11,6 +11,9 @@ from std_msgs.msg import String
 from robothon2023.full_arm_movement import FullArmMovement
 import kortex_driver.msg
 import numpy as np
+from kortex_driver.srv import *
+from kortex_driver.msg import *
+import actionlib
 
 class PickAndPlace(object):
 
@@ -20,6 +23,7 @@ class PickAndPlace(object):
         self.fam = FullArmMovement()
         self.boundary_safety = rospy.get_param("~boundary_safety", None)
         self.joint_angles = rospy.get_param("~joint_angles", None)
+        self.trajectories = rospy.get_param("~trajectories", None)
         if self.boundary_safety is None or self.joint_angles is None:
             rospy.logerr("Joint angles or boundary_safety not defined.")
             sys.exit(1)
@@ -47,6 +51,121 @@ class PickAndPlace(object):
         rospy.loginfo("READY!")
         rospy.sleep(3.0)
         rospy.loginfo("READY!")
+    
+    def traverse_waypoints(self, waypoints):
+        '''
+        waypoints: list of waypoints to traverse.\n
+        each waypoint is a list of 6 floats: [x, y, z, roll, pitch, yaw].\n
+        angles are in degrees.
+        '''
+
+        # move the arm through the waypoints
+        feedback = rospy.wait_for_message("/" + self.fam.robot_name + "/base_feedback", BaseCyclic_Feedback)
+
+        client = actionlib.SimpleActionClient('/' + self.fam.robot_name + '/cartesian_trajectory_controller/follow_cartesian_trajectory', 
+                                              kortex_driver.msg.FollowCartesianTrajectoryAction)
+
+        client.wait_for_server()
+
+        goal = FollowCartesianTrajectoryGoal()
+
+        # create waypoints
+        for waypoint in waypoints:
+            goal.trajectory.append(self.FillCartesianWaypoint(waypoint[0], waypoint[1], waypoint[2],
+                                                                math.radians(waypoint[3]), math.radians(waypoint[4]), math.radians(waypoint[5]), 0.0))
+            
+        
+        goal.use_optimal_blending = True
+
+        # Call the service
+        rospy.loginfo("Sending goal(Cartesian waypoint) to action server...")
+        try:
+            client.send_goal(goal)
+        except rospy.ServiceException:
+            rospy.logerr("Failed to send goal.")
+            return False
+        else:
+            client.wait_for_result()
+            return True
+
+    def FillCartesianWaypoint(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius):
+        cartesianWaypoint = CartesianWaypoint()
+
+        cartesianWaypoint.pose.x = new_x
+        cartesianWaypoint.pose.y = new_y
+        cartesianWaypoint.pose.z = new_z
+        cartesianWaypoint.pose.theta_x = new_theta_x
+        cartesianWaypoint.pose.theta_y = new_theta_y
+        cartesianWaypoint.pose.theta_z = new_theta_z
+        cartesianWaypoint.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_BASE
+        cartesianWaypoint.blending_radius = blending_radius
+       
+        return cartesianWaypoint
+
+    def generate_point_to_point_waypoints(self, target_pose: PoseStamped):
+        '''
+        input: target pose in base frame\n
+
+        generate waypoints for point to point motion to avoid collisions
+        '''
+
+        # generate waypoints for point to point motion
+        waypoints = []
+        
+        feedback = rospy.wait_for_message("/" + self.fam.robot_name + "/base_feedback", BaseCyclic_Feedback)
+
+        # convert the target pose quaternion to euler angles
+        target_pose_euler = tf.transformations.euler_from_quaternion(
+            [
+                target_pose.pose.orientation.x,
+                target_pose.pose.orientation.y,
+                target_pose.pose.orientation.z,
+                target_pose.pose.orientation.w
+            ]
+        )
+
+        waypoints.append(
+            feedback.base.commanded_tool_pose_x,
+            feedback.base.commanded_tool_pose_y,
+            feedback.base.commanded_tool_pose_z + 0.05,
+            feedback.base.commanded_tool_pose_theta_x,
+            feedback.base.commanded_tool_pose_theta_y,
+            feedback.base.commanded_tool_pose_theta_z
+        )
+
+        waypoints.append(
+            target_pose.pose.position.x,
+            target_pose.pose.position.y,
+            target_pose.pose.position.z + 0.05,
+            target_pose_euler[0],
+            target_pose_euler[1],
+            target_pose_euler[2]
+        )
+
+        waypoints.append(
+            target_pose.pose.position.x,
+            target_pose.pose.position.y,
+            target_pose.pose.position.z,
+            target_pose_euler[0],
+            target_pose_euler[1],
+            target_pose_euler[2]
+        )
+
+        return waypoints
+    
+    def get_pose_from_link(self, link_name: str):
+        '''
+        input: link_name\n
+        output: PoseStamped\n
+        returns the pose of the link in the base_link frame
+        '''
+
+        msg = PoseStamped()
+        msg.header.frame_id = link_name
+        msg.header.stamp = rospy.Time.now()
+        msg = self.get_transformed_pose(msg, 'base_link')
+
+        return msg
 
     def base_feedback_cb(self, msg):
         self.current_force_z.append(msg.base.tool_external_wrench_force_z)

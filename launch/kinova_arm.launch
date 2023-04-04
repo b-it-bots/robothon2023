@@ -15,6 +15,7 @@
         <rosparam command="load" file="$(find robothon2023)/config/joint_angles.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/boundary_safety.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/task_params.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/trajectories.yaml"/>
         <remap from="~pose_in" to="$(arg pose_input)" />
     </node>
 </launch>
