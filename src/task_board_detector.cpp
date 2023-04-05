@@ -120,12 +120,13 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
         }
         catch (tf::TransformException &ex)
         {
-            ROS_ERROR("PCL transform error: %s", ex.what());
+            ROS_ERROR("transform error: %s", ex.what());
             return;
         }
         geometry_msgs::PointStamped slider_pos;
         slider_pos.header.stamp = common_time;
         slider_pos.header.frame_id = "board_link";
+        // TODO: replace with parameters
         slider_pos.point.x = 0.057;
         slider_pos.point.y = -0.035;
         slider_pos.point.z = 0.0;
@@ -138,7 +139,10 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
             ROS_ERROR("PCL transform error: %s", ex.what());
             return;
         }
+        // transform from 3D to 2D using camera matrix
+        // (fx * X + cx * Z) / Z
         double start_u = ((camera_info->K[0] * slider_pos.point.x) + (camera_info->K[2] * slider_pos.point.z)) / slider_pos.point.z;
+        // (fy * Y + cy * Z) / Z
         double start_v = ((camera_info->K[4] * slider_pos.point.y) + (camera_info->K[5] * slider_pos.point.z)) / slider_pos.point.z;
 
         slider_pos.header.stamp = common_time;
@@ -150,7 +154,6 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
         double end_u = ((camera_info->K[0] * slider_pos.point.x) + (camera_info->K[2] * slider_pos.point.z)) / slider_pos.point.z;
         double end_v = ((camera_info->K[4] * slider_pos.point.y) + (camera_info->K[5] * slider_pos.point.z)) / slider_pos.point.z;
 
-       // ROS_INFO_STREAM(start_u << ", " << start_v << ", " << end_u << ", " << end_v);
         bool slider_success = findSliderPosition(full_cloud, img, cv::Point(start_u, start_v), cv::Point(end_u, end_v), cloud_in_transformed.header.frame_id);
 
         geometry_msgs::PointStamped door_knob;
@@ -170,7 +173,6 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
         }
         double door_u = ((camera_info->K[0] * door_knob.point.x) + (camera_info->K[2] * door_knob.point.z)) / door_knob.point.z;
         double door_v = ((camera_info->K[4] * door_knob.point.y) + (camera_info->K[5] * door_knob.point.z)) / door_knob.point.z;
-        ROS_INFO_STREAM("Door: " << door_u << ", " << door_v);
 
 
         bool door_success = findDoorKnob(full_cloud, img, cv::Point(door_u, door_v), cloud_in_transformed.header.frame_id);
@@ -181,7 +183,6 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
         image_publisher.publish(img_msg);
 
     }
-    //bool slider_success = findSliderPosition(full_cloud, img, cv::Point(941, 497), cv::Point(1053, 548), cloud_in_transformed.header.frame_id);
 }
 
 /**
@@ -382,7 +383,7 @@ bool TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, cv::Mat &de
             double dist = cv::norm(cv::Point(red_circles[i][0], red_circles[i][1])- cv::Point(blue_circles[j][0], blue_circles[j][1]));
             double blue_r = blue_circles[j][2];
             double red_r = red_circles[i][2];
-            // closest distance where: circles are not overlapping, and diff in radius is less than 4 pixels
+            // closest distance where: circles are not overlapping, and diff in radius is less than N pixels
             if (dist < min_dist and dist > (blue_r + red_r) and std::abs(blue_r - red_r) < 10.0)
             {
                 min_dist = dist;
@@ -440,6 +441,9 @@ bool TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, cv::Mat &de
 
 PointCloud::Ptr TaskBoardDetector::get3DPointsInCircle(const PointCloud::Ptr &full_cloud, const cv::Vec3f &circle)
 {
+    /**
+     * loop through points in circumscribed square, find 3D positions if inside circle
+     */
     int width = full_cloud->width;
     int height = full_cloud->height;
     int grid_x_start = std::max(int(circle[0] - circle[2]), 0);
@@ -465,11 +469,22 @@ PointCloud::Ptr TaskBoardDetector::get3DPointsInCircle(const PointCloud::Ptr &fu
     return circle_cloud;
 }
 
-/**
- * find slider position
- */
 bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat &debug_image, const cv::Point &start_point, const cv::Point &end_point, const std::string &pc_frame_id)
 {
+    /**
+     * 1. extract ROI from approximate start and end points
+     * 2. select largest contour after edge detection, and find the minAreaRectangle of it to get its orientation
+     * 3. rotate the ROI based on the orientation
+     * 4. crop the image again based on largest contour, so now the image should only consist of the slider
+     * 5. extract a slice from the center of the slider (i.e. through the black strip) and binary threshold it
+     * 6. match a template to find location of the slider knob (template is black-white-black region, which resembles the knob)
+     * 7. transform matched location back to the original image:
+     *     a) add offsets to get location in ROI from step 4
+     *     b) derotate using inverse rotation matrix to get location ROI from step 1
+     *     c) add offsets to get location in original image
+     * 8. find 3D positions of slider knob, and start and end location of slider slot and publish as poses (w.r.t. base_link)
+     */
+    // step 1
     double margin = 20.0;
     double min_x = std::min(start_point.x - margin, end_point.x - margin);
     double max_x = std::max(start_point.x + margin, end_point.x + margin);
@@ -483,14 +498,14 @@ bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat 
     }
 
     cv::Mat slider_roi(debug_image, cv::Rect(cv::Point(min_x, min_y), cv::Point(max_x, max_y)));
+
+    // step 2
     cv::cvtColor(slider_roi, slider_roi, cv::COLOR_BGR2GRAY);
     cv::GaussianBlur(slider_roi, slider_roi, cv::Size(3, 3), 0, 0);
     cv::Mat slider_edges;
     cv::Canny(slider_roi, slider_edges, 100, 200, 3);
     dilate(slider_edges);
     erode(slider_edges);
-//    cv::imshow("edges", slider_edges);
-//    cv::waitKey(10);
     std::vector<cv::Point> largest_contour = getLargestContour(slider_edges);
     if (largest_contour.empty())
     {
@@ -504,11 +519,12 @@ bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat 
     cv::Mat rotation_matrix = cv::getRotationMatrix2D(rotation_center, min_area_rect.angle, 1.0);
     cv::Mat inv_rotation_matrix = cv::getRotationMatrix2D(rotation_center, -(min_area_rect.angle), 1.0);
 
+    // step 3
     cv::transform(largest_contour, largest_contour, rotation_matrix);
     cv::Mat slider_roi_rot;
     cv::warpAffine(slider_roi, slider_roi_rot, rotation_matrix, cv::Size(slider_roi.cols, slider_roi.rows));
-    //cv::imshow("slider_roi_rot", slider_roi_rot);
-    //cv::waitKey(10);
+
+    // step 4
     cv::Rect bounding_rect = cv::boundingRect(largest_contour);
     if (bounding_rect.x < 0 or bounding_rect.y < 0 or (bounding_rect.x + bounding_rect.width) > slider_roi_rot.cols or (bounding_rect.y + bounding_rect.height) > slider_roi_rot.rows)
     {
@@ -516,16 +532,17 @@ bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat 
         ROS_ERROR_STREAM(bounding_rect.x << ", " << bounding_rect.y << ", " << bounding_rect.width << ", " << bounding_rect.height << ", " << slider_roi_rot.cols << ", " << slider_roi_rot.rows);
         return false;
     }
-//    cv::imshow("im", slider_roi_rot);
-//    cv::waitKey(10);
 
     cv::Mat slider_roi_rot_roi(slider_roi_rot, bounding_rect);
-    cv::Rect center_slice(0, static_cast<int>((float)slider_roi_rot_roi.rows / 2) - 1, slider_roi_rot_roi.cols, 3);
-//    ROS_INFO_STREAM(center_slice.x << ", " << center_slice.y << ", " << center_slice.height << ", " << center_slice.width << ", " << slider_roi_rot_roi.rows << ", " << slider_roi_rot_roi.cols);
 
+
+    //step 5
+    cv::Rect center_slice(0, static_cast<int>((float)slider_roi_rot_roi.rows / 2) - 1, slider_roi_rot_roi.cols, 3);
     cv::Mat slider_roi_rot_center(slider_roi_rot_roi, center_slice);
     cv::Mat binary_img;
     cv::threshold(slider_roi_rot_center, binary_img, 50, 255, cv::THRESH_BINARY);
+
+    //step 6
     cv::Mat temp = cv::Mat::zeros(3, 30, CV_8U);
     cv::rectangle(temp, cv::Point(10, 0), cv::Point(20, 3), 255, -1, cv::LINE_AA);
     cv::Mat result;
@@ -535,7 +552,7 @@ bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat 
     cv::Point max_loc;
     cv::minMaxLoc(result, &min_val, &max_val, &min_loc, &max_loc, cv::Mat());
 
-    // start transforming back to original image
+    // step 7: start transforming back to original image
     max_loc.x += 15;
     max_loc.y = static_cast<int>((float)slider_roi_rot_roi.rows / 2);
     max_loc.x += bounding_rect.x;
@@ -547,9 +564,9 @@ bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat 
     pts[0].x += min_x;
     pts[0].y += min_y;
     // end transforming back to original image
-    
     cv::circle(debug_image, pts[0], 5, cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
 
+    // step 8
     cv::Vec3f slider_circle;
     cv::Vec3f slider_start_circle;
     cv::Vec3f slider_end_circle;
@@ -636,16 +653,16 @@ bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat 
     slider_end_pose_publisher.publish(pose);
 
 
-    //cv::imshow("igm", debug_image);
-    //cv::waitKey(10);
     return true;
 }
 
-/**
- * find slider position
- */
 bool TaskBoardDetector::findDoorKnob(PointCloud::Ptr &full_cloud, cv::Mat &debug_image, const cv::Point &start_point, const std::string &pc_frame_id)
 {
+    /**
+     * 1. extract ROI from approximate position
+     * 2. circle detection on edges
+     * 3. find 3D points of first (and presumably only) circle and publish as a pose
+     */
     double margin = 50.0;
     double min_x = std::min(start_point.x - margin, start_point.x - margin);
     double max_x = std::max(start_point.x + margin, start_point.x + margin);
