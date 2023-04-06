@@ -181,69 +181,6 @@ class FullArmMovement:
 
         return waypoints
     
-    def get_pose_from_link(self, link_name: str):
-        '''
-        input: link_name\n
-        output: PoseStamped\n
-        returns the pose of the link in the base_link frame
-        '''
-
-        msg = PoseStamped()
-        msg.header.frame_id = link_name
-        msg.header.stamp = rospy.Time.now()
-        msg = self.get_transformed_pose(msg, 'base_link')
-
-        return msg
-    
-    def get_transformed_pose(self, reference_pose, target_frame):
-        """ Transform pose with multiple retries
-
-        :return: The updated state.
-        :rtype: str
-
-        """
-        for i in range(0, self.transform_tries):
-            transformed_pose = self.transform_pose(reference_pose, target_frame)
-            if transformed_pose:
-                return transformed_pose
-        transformed_pose = None
-        return transformed_pose
-    
-    def transform_pose(self, reference_pose, target_frame):
-        """
-        Transforms a given pose into the target frame.
-
-        :param reference_pose: The reference pose.
-        :type reference_pose: geometry_msgs.msg.PoseStamped
-
-        :param target_frame: The name of the taget frame.
-        :type target_frame: String
-
-        :return: The pose in the target frame.
-        :rtype: geometry_msgs.msg.PoseStamped or None
-
-        """
-        try:
-            common_time = self.listener.getLatestCommonTime(
-                target_frame, reference_pose.header.frame_id
-            )
-
-            self.listener.waitForTransform(
-                target_frame, reference_pose.header.frame_id,
-                common_time, rospy.Duration(self.wait_for_transform)
-            )
-            reference_pose.header.stamp = common_time
-
-            transformed_pose = self.listener.transformPose(
-                target_frame, reference_pose,
-            )
-
-            return transformed_pose
-
-        except tf.Exception as error:
-            rospy.logwarn("Exception occurred: {0}".format(error))
-            return None
-    
     def FillCartesianWaypoint(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius):
         waypoint = Waypoint()
         cartesianWaypoint = CartesianWaypoint()

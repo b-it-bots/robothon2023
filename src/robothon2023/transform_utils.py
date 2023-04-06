@@ -7,7 +7,7 @@ from __future__ import print_function
 import tf
 
 from geometry_msgs.msg import PoseStamped
-
+from typing import Union
 
 class TransformUtils(object):
 
@@ -25,7 +25,7 @@ class TransformUtils(object):
 
     def transformed_pose_with_retries(self, reference_pose: PoseStamped, 
                                       target_frame: str,
-                                      retries = 5 : int) -> Union[PoseStamped, None]:
+                                      retries  : int = 5) -> Union[PoseStamped, None]:
         """ Transform pose with multiple retries
 
         :return: The updated state.
@@ -74,3 +74,31 @@ class TransformUtils(object):
         except tf.Exception as error:
             rospy.logwarn("Exception occurred: {0}".format(error))
             return None
+        
+    def get_pose_from_link(self, link_name: str):
+        '''
+        input: link_name\n
+        output: PoseStamped\n
+        returns the pose of the link in the base_link frame
+        '''
+
+        msg = PoseStamped()
+        msg.header.frame_id = link_name
+        msg.header.stamp = rospy.Time.now()
+        msg = self.get_transformed_pose(msg, 'base_link')
+
+        return msg
+    
+    def get_transformed_pose(self, reference_pose, target_frame):
+        """ Transform pose with multiple retries
+
+        :return: The updated state.
+        :rtype: str
+
+        """
+        for i in range(0, self.transform_tries):
+            transformed_pose = self.transform_pose(reference_pose, target_frame)
+            if transformed_pose:
+                return transformed_pose
+        transformed_pose = None
+        return transformed_pose
