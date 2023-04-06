@@ -3,6 +3,32 @@ from geometry_msgs.msg import PoseStamped
 from tf.transformations import euler_from_quaternion, quaternion_from_euler
 import math
 
+def get_kinovapose_from_list(pose_list):
+    return KinovaPose(pose_list[0], pose_list[1], pose_list[2], pose_list[3], pose_list[4], pose_list[5])
+
+def get_kinovapose_from_pose_stamped(pose: PoseStamped):
+    '''
+    Converts a PoseStamped message to a KinovaPose.
+
+    input: pose (PoseStamped): The PoseStamped message.
+    '''
+
+    # convert the quaternion to euler angles
+    quaternion = (
+        pose.pose.orientation.x,
+        pose.pose.orientation.y,
+        pose.pose.orientation.z,
+        pose.pose.orientation.w
+    )
+    euler = euler_from_quaternion(quaternion)
+
+    # convert the euler angles to degrees
+    theta_x_deg = math.degrees(euler[0])
+    theta_y_deg = math.degrees(euler[1])
+    theta_z_deg = math.degrees(euler[2])
+
+    return KinovaPose(pose.pose.position.x, pose.pose.position.y, pose.pose.position.z, theta_x_deg, theta_y_deg, theta_z_deg)
+
 @dataclass
 class KinovaPose:
     """
@@ -42,34 +68,6 @@ class KinovaPose:
 
     def to_list(self):
         return [self.x, self.y, self.z, self.theta_x_deg, self.theta_y_deg, self.theta_z_deg]
-
-    @staticmethod
-    def from_list(pose_list):
-        return KinovaPose(pose_list[0], pose_list[1], pose_list[2], pose_list[3], pose_list[4], pose_list[5])
-
-    @staticmethod
-    def from_pose_stamped(pose: PoseStamped):
-        '''
-        Converts a PoseStamped message to a KinovaPose.
-
-        input: pose (PoseStamped): The PoseStamped message.
-        '''
-
-        # convert the quaternion to euler angles
-        quaternion = (
-            pose.pose.orientation.x,
-            pose.pose.orientation.y,
-            pose.pose.orientation.z,
-            pose.pose.orientation.w
-        )
-        euler = euler_from_quaternion(quaternion)
-
-        # convert the euler angles to degrees
-        theta_x_deg = math.degrees(euler[0])
-        theta_y_deg = math.degrees(euler[1])
-        theta_z_deg = math.degrees(euler[2])
-
-        return KinovaPose(pose.pose.position.x, pose.pose.position.y, pose.pose.position.z, theta_x_deg, theta_y_deg, theta_z_deg)
     
     def to_pose_stamped(self, frame_id: str="base_link"):
         '''

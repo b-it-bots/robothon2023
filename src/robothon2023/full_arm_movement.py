@@ -105,7 +105,8 @@ class FullArmMovement:
                                                                     kinova_pose.z,
                                                                     kinova_pose.theta_x_deg,
                                                                     kinova_pose.theta_y_deg,
-                                                                    kinova_pose.theta_z_deg))
+                                                                    kinova_pose.theta_z_deg,
+                                                                    0.0))
         
         trajectory.use_optimal_blending = True
 
@@ -205,6 +206,24 @@ class FullArmMovement:
         waypoint.oneof_type_of_waypoint.cartesian_waypoint.append(cartesianWaypoint)
 
         return waypoint
+    
+    def get_current_pose(self) -> KinovaPose:
+        '''
+        Get the current position of the robot
+        
+        output: current position of the robot in KinovaPose
+        '''
+        feedback = rospy.wait_for_message("/" + self.robot_name + "/base_feedback", BaseCyclic_Feedback)
+
+        current_pose = KinovaPose()
+        current_pose.x = feedback.base.commanded_tool_pose_x
+        current_pose.y = feedback.base.commanded_tool_pose_y
+        current_pose.z = feedback.base.commanded_tool_pose_z
+        current_pose.theta_x_deg = feedback.base.commanded_tool_pose_theta_x
+        current_pose.theta_y_deg = feedback.base.commanded_tool_pose_theta_y
+        current_pose.theta_z_deg = feedback.base.commanded_tool_pose_theta_z
+
+        return current_pose
 
     def wait_for_action_end_or_abort(self):
         while not rospy.is_shutdown():
