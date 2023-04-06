@@ -85,35 +85,44 @@ class FullArmMovement:
 
         # move the arm through the waypoints
 
-        client = actionlib.SimpleActionClient('/' + self.fam.robot_name + '/cartesian_trajectory_controller/follow_cartesian_trajectory', 
-                                              kortex_driver.msg.FollowCartesianTrajectoryAction)
+        req = ExecuteActionRequest()
+        trajectory = WaypointList()
 
-        client.wait_for_server()
+        # client = actionlib.SimpleActionClient('/' + self.robot_name + '/cartesian_trajectory_controller/follow_cartesian_trajectory', 
+        #                                       kortex_driver.msg.FollowCartesianTrajectoryAction)
 
-        goal = FollowCartesianTrajectoryGoal()
+        # rospy.loginfo("Waiting for cartesian waypoint server...")
+        # client.wait_for_server()
+
+        # goal = FollowCartesianTrajectoryGoal()
 
         # create waypoints
         for waypoint in waypoints:
-            goal.trajectory.append(self.FillCartesianWaypointTW(waypoint[0], waypoint[1], waypoint[2],
-                                                                math.radians(waypoint[3]), math.radians(waypoint[4]), math.radians(waypoint[5]), 0.0))
-            
+             trajectory.waypoints.append(self.FillCartesianWaypoint(waypoint[0], waypoint[1], waypoint[2],
+                                                                waypoint[3], waypoint[4], waypoint[5], 0.0))    
         
-        goal.use_optimal_blending = True
+        trajectory.use_optimal_blending = True
+
+        req.input.oneof_action_parameters.execute_waypoint_list.append(trajectory)
 
         # Call the service
         rospy.loginfo("Sending goal(Cartesian waypoint) to action server...")
         try:
-            client.send_goal(goal)
+            # client.send_goal(goal)
+            self.execute_action(req)
         except rospy.ServiceException:
             rospy.logerr("Failed to send goal.")
             return False
         else:
-            client.wait_for_result()
-            return True
+            # client.wait_for_result()
+            # return True
+            return self.wait_for_action_end_or_abort()
         
     def FillCartesianWaypointTW(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius):
         '''
-        Fill CartesianWaypoint with the given parameters for traverse waypoints method
+        input: x, y, z, theta_x, theta_y, theta_z, blending_radius\n
+        input angles are in radians\n
+        Fill CartesianWaypoint with the given parameters for actionlib waypoints method
         '''
         self.last_action_notif_type = None
 
@@ -140,7 +149,7 @@ class FullArmMovement:
         # generate waypoints for point to point motion
         waypoints = []
         
-        feedback = rospy.wait_for_message("/" + self.fam.robot_name + "/base_feedback", BaseCyclic_Feedback)
+        feedback = rospy.wait_for_message("/" + self.robot_name + "/base_feedback", BaseCyclic_Feedback)
 
         # convert the target pose quaternion to euler angles
         target_pose_euler = tf.transformations.euler_from_quaternion(
@@ -182,6 +191,10 @@ class FullArmMovement:
         return waypoints
     
     def FillCartesianWaypoint(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius):
+        '''
+        input: x, y, z, theta_x, theta_y, theta_z, blending_radius\n
+        input angles are in degrees\n
+        '''
         waypoint = Waypoint()
         cartesianWaypoint = CartesianWaypoint()
 
@@ -340,7 +353,7 @@ class FullArmMovement:
         else:
             return self.wait_for_action_end_or_abort()
 
-    def send_gripper_command(self, value):
+    def execute_gripper_command(self, value):
         # Initialize the request
         # Close the gripper
         req = SendGripperCommandRequest()
@@ -362,28 +375,15 @@ class FullArmMovement:
             time.sleep(0.5)
             return True
 
-    def send_cartesian_pose(self, pose: PoseStamped):
+    def send_cartesian_pose(self, pose):
         '''
         input: pose (PoseStamped)
         output: success (bool)
         takes in a pose and moves the arm to that pose in cartesian space
         '''
         self.last_action_notif_type = None
-
-        waypoints = []
-
-        theta_x, theta_y, theta_z = tf.transformations.euler_from_quaternion((
-            pose.pose.orientation.x, pose.pose.orientation.y,
-            pose.pose.orientation.z, pose.pose.orientation.w))
-
-        waypoints.append(pose.pose.position.x,  
-                            pose.pose.position.y,  
-                            pose.pose.position.z , 
-                            math.degrees(theta_x), 
-                            math.degrees(theta_y),
-                            math.degrees(theta_z))
         
-        return self.traverse_waypoints(waypoints)
+        return self.traverse_waypoints([pose])
 
     def main(self):
         # For testing purposes
@@ -413,7 +413,7 @@ class FullArmMovement:
             # Example of gripper command
             # Let's fully open the gripper
             if self.is_gripper_present:
-                success &= self.send_gripper_command(0.0)
+                success &= self.execute_gripper_command(0.0)
             else:
                 rospy.logwarn("No gripper is present on the arm.")  
             #*******************************************************************************
@@ -437,7 +437,7 @@ class FullArmMovement:
             # Example of gripper command
             # Let's close the gripper at 50%
             if self.is_gripper_present:
-                success &= self.send_gripper_command(0.5)
+                success &= self.execute_gripper_command(0.5)
             else:
                 rospy.logwarn("No gripper is present on the arm.")    
             #*******************************************************************************
