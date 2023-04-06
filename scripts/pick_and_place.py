@@ -13,7 +13,6 @@ import kortex_driver.msg
 import numpy as np
 from kortex_driver.srv import *
 from kortex_driver.msg import *
-import actionlib
 
 class PickAndPlace(object):
 
@@ -51,121 +50,6 @@ class PickAndPlace(object):
         rospy.loginfo("READY!")
         rospy.sleep(3.0)
         rospy.loginfo("READY!")
-    
-    def traverse_waypoints(self, waypoints):
-        '''
-        waypoints: list of waypoints to traverse.\n
-        each waypoint is a list of 6 floats: [x, y, z, roll, pitch, yaw].\n
-        angles are in degrees.
-        '''
-
-        # move the arm through the waypoints
-        feedback = rospy.wait_for_message("/" + self.fam.robot_name + "/base_feedback", BaseCyclic_Feedback)
-
-        client = actionlib.SimpleActionClient('/' + self.fam.robot_name + '/cartesian_trajectory_controller/follow_cartesian_trajectory', 
-                                              kortex_driver.msg.FollowCartesianTrajectoryAction)
-
-        client.wait_for_server()
-
-        goal = FollowCartesianTrajectoryGoal()
-
-        # create waypoints
-        for waypoint in waypoints:
-            goal.trajectory.append(self.FillCartesianWaypoint(waypoint[0], waypoint[1], waypoint[2],
-                                                                math.radians(waypoint[3]), math.radians(waypoint[4]), math.radians(waypoint[5]), 0.0))
-            
-        
-        goal.use_optimal_blending = True
-
-        # Call the service
-        rospy.loginfo("Sending goal(Cartesian waypoint) to action server...")
-        try:
-            client.send_goal(goal)
-        except rospy.ServiceException:
-            rospy.logerr("Failed to send goal.")
-            return False
-        else:
-            client.wait_for_result()
-            return True
-
-    def FillCartesianWaypoint(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius):
-        cartesianWaypoint = CartesianWaypoint()
-
-        cartesianWaypoint.pose.x = new_x
-        cartesianWaypoint.pose.y = new_y
-        cartesianWaypoint.pose.z = new_z
-        cartesianWaypoint.pose.theta_x = new_theta_x
-        cartesianWaypoint.pose.theta_y = new_theta_y
-        cartesianWaypoint.pose.theta_z = new_theta_z
-        cartesianWaypoint.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_BASE
-        cartesianWaypoint.blending_radius = blending_radius
-       
-        return cartesianWaypoint
-
-    def generate_point_to_point_waypoints(self, target_pose: PoseStamped):
-        '''
-        input: target pose in base frame\n
-
-        generate waypoints for point to point motion to avoid collisions
-        '''
-
-        # generate waypoints for point to point motion
-        waypoints = []
-        
-        feedback = rospy.wait_for_message("/" + self.fam.robot_name + "/base_feedback", BaseCyclic_Feedback)
-
-        # convert the target pose quaternion to euler angles
-        target_pose_euler = tf.transformations.euler_from_quaternion(
-            [
-                target_pose.pose.orientation.x,
-                target_pose.pose.orientation.y,
-                target_pose.pose.orientation.z,
-                target_pose.pose.orientation.w
-            ]
-        )
-
-        waypoints.append(
-            feedback.base.commanded_tool_pose_x,
-            feedback.base.commanded_tool_pose_y,
-            feedback.base.commanded_tool_pose_z + 0.05,
-            feedback.base.commanded_tool_pose_theta_x,
-            feedback.base.commanded_tool_pose_theta_y,
-            feedback.base.commanded_tool_pose_theta_z
-        )
-
-        waypoints.append(
-            target_pose.pose.position.x,
-            target_pose.pose.position.y,
-            target_pose.pose.position.z + 0.05,
-            target_pose_euler[0],
-            target_pose_euler[1],
-            target_pose_euler[2]
-        )
-
-        waypoints.append(
-            target_pose.pose.position.x,
-            target_pose.pose.position.y,
-            target_pose.pose.position.z,
-            target_pose_euler[0],
-            target_pose_euler[1],
-            target_pose_euler[2]
-        )
-
-        return waypoints
-    
-    def get_pose_from_link(self, link_name: str):
-        '''
-        input: link_name\n
-        output: PoseStamped\n
-        returns the pose of the link in the base_link frame
-        '''
-
-        msg = PoseStamped()
-        msg.header.frame_id = link_name
-        msg.header.stamp = rospy.Time.now()
-        msg = self.get_transformed_pose(msg, 'base_link')
-
-        return msg
 
     def base_feedback_cb(self, msg):
         self.current_force_z.append(msg.base.tool_external_wrench_force_z)
@@ -184,7 +68,7 @@ class PickAndPlace(object):
         # either because of a camera calibration offset or something to do with the reference frame for sending Cartesian poses
 #        msg.pose.position.x += 0.01
         # Creating a zero pose of the baord link and trasnforming it with respect to base link
-        msg = self.get_transformed_pose(msg, 'base_link')
+        msg = self.fam.get_transformed_pose(msg, 'base_link')
         print (msg)
         debug_pose = copy.deepcopy(msg)
         self.debug_pose_pub.publish(debug_pose)
@@ -224,7 +108,7 @@ class PickAndPlace(object):
 
 
     def perception_pose_cb(self, msg):
-        msg = self.get_transformed_pose(msg, 'base_footprint')
+        msg = self.fam.get_transformed_pose(msg, 'base_footprint')
         rospy.loginfo(msg.pose)
         roll, pitch, yaw = tf.transformations.euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w])
         print ("Extract yaw ", yaw)
@@ -250,7 +134,7 @@ class PickAndPlace(object):
             msg.pose.position.z = msg.pose.position.z + 0.15
 
             #Saving it back in base link
-            msg = self.get_transformed_pose(msg, 'base_link')
+            msg = self.fam.get_transformed_pose(msg, 'base_link')
             self.perception_pose = msg
 
 
@@ -324,65 +208,16 @@ class PickAndPlace(object):
         :returns: None
 
         """
-        self.fam.example_clear_faults()
-        self.fam.example_subscribe_to_a_robot_notification()
+        self.fam.clear_faults()
+        self.fam.subscribe_to_a_robot_notification()
         # self.fam.test_send_joint_angles(self.joint_angles["vertical_pose"])
         print (self.joint_angles['perceive_table'])
-        self.fam.example_send_joint_angles(self.joint_angles["perceive_table"])
-        self.fam.example_send_gripper_command(0.0) #Open the gripper 
+        self.fam.send_joint_angles(self.joint_angles["perceive_table"])
+        self.fam.send_gripper_command(0.0) #Open the gripper 
         #self.fam.example_send_gripper_command(0.5) #half close the gripper 
-        self.fam.example_send_gripper_command(0.9) #full close the gripper 
+        self.fam.send_gripper_command(0.9) #full close the gripper 
         rospy.sleep(2.0)
 
-    def get_transformed_pose(self, reference_pose, target_frame):
-        """ Transform pose with multiple retries
-
-        :return: The updated state.
-        :rtype: str
-
-        """
-        for i in range(0, self.transform_tries):
-            transformed_pose = self.transform_pose(reference_pose, target_frame)
-            if transformed_pose:
-                return transformed_pose
-        transformed_pose = None
-        return transformed_pose
-
-
-    def transform_pose(self, reference_pose, target_frame):
-        """
-        Transforms a given pose into the target frame.
-
-        :param reference_pose: The reference pose.
-        :type reference_pose: geometry_msgs.msg.PoseStamped
-
-        :param target_frame: The name of the taget frame.
-        :type target_frame: String
-
-        :return: The pose in the target frame.
-        :rtype: geometry_msgs.msg.PoseStamped or None
-
-        """
-        try:
-            common_time = self.listener.getLatestCommonTime(
-                target_frame, reference_pose.header.frame_id
-            )
-
-            self.listener.waitForTransform(
-                target_frame, reference_pose.header.frame_id,
-                common_time, rospy.Duration(self.wait_for_transform)
-            )
-            reference_pose.header.stamp = common_time
-
-            transformed_pose = self.listener.transformPose(
-                target_frame, reference_pose,
-            )
-
-            return transformed_pose
-
-        except tf.Exception as error:
-            rospy.logwarn("Exception occurred: {0}".format(error))
-            return None
 
 if __name__ == "__main__":
     rospy.init_node('pick_and_place')
