@@ -22,7 +22,9 @@ from kortex_driver.msg import *
 
 import actionlib
 from geometry_msgs.msg import PoseStamped
+from utils.kinova_pose import KinovaPose
 
+from typing import List
 
 class FullArmMovement:
     def __init__(self):
@@ -76,9 +78,9 @@ class FullArmMovement:
     def cb_action_topic(self, notif):
         self.last_action_notif_type = notif.action_event
     
-    def traverse_waypoints(self, waypoints):
+    def traverse_waypoints(self, waypoints: List[KinovaPose]):
         '''
-        waypoints: list of waypoints to traverse.\n
+        waypoints: list of KinovaPose's to traverse.\n
         each waypoint is a list of 6 floats: [x, y, z, roll, pitch, yaw].\n
         angles are in degrees.
         '''
@@ -97,9 +99,13 @@ class FullArmMovement:
         # goal = FollowCartesianTrajectoryGoal()
 
         # create waypoints
-        for waypoint in waypoints:
-             trajectory.waypoints.append(self.FillCartesianWaypoint(waypoint[0], waypoint[1], waypoint[2],
-                                                                waypoint[3], waypoint[4], waypoint[5], 0.0))    
+        for kinova_pose in waypoints:
+             trajectory.waypoints.append(self.FillCartesianWaypoint(kinova_pose.x,
+                                                                    kinova_pose.y,
+                                                                    kinova_pose.z,
+                                                                    kinova_pose.theta_x_deg,
+                                                                    kinova_pose.theta_y_deg,
+                                                                    kinova_pose.theta_z_deg))
         
         trajectory.use_optimal_blending = True
 
@@ -139,7 +145,7 @@ class FullArmMovement:
        
         return cartesianWaypoint
     
-    def generate_point_to_point_waypoints(self, target_pose: PoseStamped):
+    def generate_point_to_point_waypoints(self, target_pose: KinovaPose):
         '''
         input: target pose in base frame\n
 
@@ -151,16 +157,6 @@ class FullArmMovement:
         
         feedback = rospy.wait_for_message("/" + self.robot_name + "/base_feedback", BaseCyclic_Feedback)
 
-        # convert the target pose quaternion to euler angles
-        target_pose_euler = tf.transformations.euler_from_quaternion(
-            [
-                target_pose.pose.orientation.x,
-                target_pose.pose.orientation.y,
-                target_pose.pose.orientation.z,
-                target_pose.pose.orientation.w
-            ]
-        )
-
         waypoints.append(
             feedback.base.commanded_tool_pose_x,
             feedback.base.commanded_tool_pose_y,
@@ -171,21 +167,21 @@ class FullArmMovement:
         )
 
         waypoints.append(
-            target_pose.pose.position.x,
-            target_pose.pose.position.y,
-            target_pose.pose.position.z + 0.05,
-            target_pose_euler[0],
-            target_pose_euler[1],
-            target_pose_euler[2]
+            target_pose.x,
+            target_pose.y,
+            target_pose.z + 0.05,
+            target_pose.theta_x_deg,
+            target_pose.theta_y_deg,
+            target_pose.theta_z_deg
         )
 
         waypoints.append(
-            target_pose.pose.position.x,
-            target_pose.pose.position.y,
-            target_pose.pose.position.z,
-            target_pose_euler[0],
-            target_pose_euler[1],
-            target_pose_euler[2]
+            target_pose.x,
+            target_pose.y,
+            target_pose.z,
+            target_pose.theta_x_deg,
+            target_pose.theta_y_deg,
+            target_pose.theta_z_deg
         )
 
         return waypoints
@@ -375,7 +371,7 @@ class FullArmMovement:
             time.sleep(0.5)
             return True
 
-    def send_cartesian_pose(self, pose):
+    def send_cartesian_pose(self, pose: KinovaPose):
         '''
         input: pose (PoseStamped)
         output: success (bool)
