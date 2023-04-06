@@ -71,7 +71,6 @@ class KinovaPose:
 
         return KinovaPose(pose.pose.position.x, pose.pose.position.y, pose.pose.position.z, theta_x_deg, theta_y_deg, theta_z_deg)
     
-    @staticmethod
     def to_pose_stamped(self, frame_id: str="base_link"):
         '''
         Converts the KinovaPose to a PoseStamped message.
