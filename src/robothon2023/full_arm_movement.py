@@ -73,6 +73,8 @@ class FullArmMovement:
         rospy.wait_for_service(validate_waypoint_list_full_name)
         self.validate_waypoint_list = rospy.ServiceProxy(validate_waypoint_list_full_name, ValidateWaypointList)
 
+
+
     def cb_action_topic(self, notif):
         self.last_action_notif_type = notif.action_event
     

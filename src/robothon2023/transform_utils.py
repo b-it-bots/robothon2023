@@ -5,6 +5,7 @@
 
 from __future__ import print_function
 import tf
+import rospy
 
 from geometry_msgs.msg import PoseStamped
 from typing import Union
@@ -82,10 +83,18 @@ class TransformUtils(object):
         returns the pose of the link in the base_link frame
         '''
 
+        (trans, rot) = self.listener.lookupTransform(link_name, "base_link", rospy.Time(2))
+
+        # Create a PoseStamped message with the pose of the source frame in the target frame
         msg = PoseStamped()
         msg.header.frame_id = link_name
-        msg.header.stamp = rospy.Time.now()
-        msg = self.get_transformed_pose(msg, 'base_link')
+        msg.pose.position.x = trans[0]
+        msg.pose.position.y = trans[1]
+        msg.pose.position.z = trans[2]
+        msg.pose.orientation.x = rot[0]
+        msg.pose.orientation.y = rot[1]
+        msg.pose.orientation.z = rot[2]
+        msg.pose.orientation.w = rot[3]
 
         return msg
     
