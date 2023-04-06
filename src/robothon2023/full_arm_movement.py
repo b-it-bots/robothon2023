@@ -22,7 +22,9 @@ from kortex_driver.msg import *
 
 import actionlib
 from geometry_msgs.msg import PoseStamped
+from utils.kinova_pose import KinovaPose
 
+from typing import List
 
 class FullArmMovement:
     def __init__(self):
@@ -78,44 +80,58 @@ class FullArmMovement:
     def cb_action_topic(self, notif):
         self.last_action_notif_type = notif.action_event
     
-    def traverse_waypoints(self, waypoints):
+    def traverse_waypoints(self, waypoints: List[KinovaPose]):
         '''
-        waypoints: list of waypoints to traverse.\n
+        waypoints: list of KinovaPose's to traverse.\n
         each waypoint is a list of 6 floats: [x, y, z, roll, pitch, yaw].\n
         angles are in degrees.
         '''
 
         # move the arm through the waypoints
 
-        client = actionlib.SimpleActionClient('/' + self.fam.robot_name + '/cartesian_trajectory_controller/follow_cartesian_trajectory', 
-                                              kortex_driver.msg.FollowCartesianTrajectoryAction)
+        req = ExecuteActionRequest()
+        trajectory = WaypointList()
 
-        client.wait_for_server()
+        # client = actionlib.SimpleActionClient('/' + self.robot_name + '/cartesian_trajectory_controller/follow_cartesian_trajectory', 
+        #                                       kortex_driver.msg.FollowCartesianTrajectoryAction)
 
-        goal = FollowCartesianTrajectoryGoal()
+        # rospy.loginfo("Waiting for cartesian waypoint server...")
+        # client.wait_for_server()
+
+        # goal = FollowCartesianTrajectoryGoal()
 
         # create waypoints
-        for waypoint in waypoints:
-            goal.trajectory.append(self.FillCartesianWaypointTW(waypoint[0], waypoint[1], waypoint[2],
-                                                                math.radians(waypoint[3]), math.radians(waypoint[4]), math.radians(waypoint[5]), 0.0))
-            
+        for kinova_pose in waypoints:
+             trajectory.waypoints.append(self.FillCartesianWaypoint(kinova_pose.x,
+                                                                    kinova_pose.y,
+                                                                    kinova_pose.z,
+                                                                    kinova_pose.theta_x_deg,
+                                                                    kinova_pose.theta_y_deg,
+                                                                    kinova_pose.theta_z_deg,
+                                                                    0.0))
         
-        goal.use_optimal_blending = True
+        trajectory.use_optimal_blending = True
+
+        req.input.oneof_action_parameters.execute_waypoint_list.append(trajectory)
 
         # Call the service
         rospy.loginfo("Sending goal(Cartesian waypoint) to action server...")
         try:
-            client.send_goal(goal)
+            # client.send_goal(goal)
+            self.execute_action(req)
         except rospy.ServiceException:
             rospy.logerr("Failed to send goal.")
             return False
         else:
-            client.wait_for_result()
-            return True
+            # client.wait_for_result()
+            # return True
+            return self.wait_for_action_end_or_abort()
         
     def FillCartesianWaypointTW(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius):
         '''
-        Fill CartesianWaypoint with the given parameters for traverse waypoints method
+        input: x, y, z, theta_x, theta_y, theta_z, blending_radius\n
+        input angles are in radians\n
+        Fill CartesianWaypoint with the given parameters for actionlib waypoints method
         '''
         self.last_action_notif_type = None
 
@@ -132,7 +148,7 @@ class FullArmMovement:
        
         return cartesianWaypoint
     
-    def generate_point_to_point_waypoints(self, target_pose: PoseStamped):
+    def generate_point_to_point_waypoints(self, target_pose: KinovaPose):
         '''
         input: target pose in base frame\n
 
@@ -142,17 +158,7 @@ class FullArmMovement:
         # generate waypoints for point to point motion
         waypoints = []
         
-        feedback = rospy.wait_for_message("/" + self.fam.robot_name + "/base_feedback", BaseCyclic_Feedback)
-
-        # convert the target pose quaternion to euler angles
-        target_pose_euler = tf.transformations.euler_from_quaternion(
-            [
-                target_pose.pose.orientation.x,
-                target_pose.pose.orientation.y,
-                target_pose.pose.orientation.z,
-                target_pose.pose.orientation.w
-            ]
-        )
+        feedback = rospy.wait_for_message("/" + self.robot_name + "/base_feedback", BaseCyclic_Feedback)
 
         waypoints.append(
             feedback.base.commanded_tool_pose_x,
@@ -164,26 +170,30 @@ class FullArmMovement:
         )
 
         waypoints.append(
-            target_pose.pose.position.x,
-            target_pose.pose.position.y,
-            target_pose.pose.position.z + 0.05,
-            target_pose_euler[0],
-            target_pose_euler[1],
-            target_pose_euler[2]
+            target_pose.x,
+            target_pose.y,
+            target_pose.z + 0.05,
+            target_pose.theta_x_deg,
+            target_pose.theta_y_deg,
+            target_pose.theta_z_deg
         )
 
         waypoints.append(
-            target_pose.pose.position.x,
-            target_pose.pose.position.y,
-            target_pose.pose.position.z,
-            target_pose_euler[0],
-            target_pose_euler[1],
-            target_pose_euler[2]
+            target_pose.x,
+            target_pose.y,
+            target_pose.z,
+            target_pose.theta_x_deg,
+            target_pose.theta_y_deg,
+            target_pose.theta_z_deg
         )
 
         return waypoints
     
     def FillCartesianWaypoint(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius):
+        '''
+        input: x, y, z, theta_x, theta_y, theta_z, blending_radius\n
+        input angles are in degrees\n
+        '''
         waypoint = Waypoint()
         cartesianWaypoint = CartesianWaypoint()
 
@@ -198,6 +208,24 @@ class FullArmMovement:
         waypoint.oneof_type_of_waypoint.cartesian_waypoint.append(cartesianWaypoint)
 
         return waypoint
+    
+    def get_current_pose(self) -> KinovaPose:
+        '''
+        Get the current position of the robot
+        
+        output: current position of the robot in KinovaPose
+        '''
+        feedback = rospy.wait_for_message("/" + self.robot_name + "/base_feedback", BaseCyclic_Feedback)
+
+        current_pose = KinovaPose()
+        current_pose.x = feedback.base.commanded_tool_pose_x
+        current_pose.y = feedback.base.commanded_tool_pose_y
+        current_pose.z = feedback.base.commanded_tool_pose_z
+        current_pose.theta_x_deg = feedback.base.commanded_tool_pose_theta_x
+        current_pose.theta_y_deg = feedback.base.commanded_tool_pose_theta_y
+        current_pose.theta_z_deg = feedback.base.commanded_tool_pose_theta_z
+
+        return current_pose
 
     def wait_for_action_end_or_abort(self):
         while not rospy.is_shutdown():
@@ -342,7 +370,7 @@ class FullArmMovement:
         else:
             return self.wait_for_action_end_or_abort()
 
-    def send_gripper_command(self, value):
+    def execute_gripper_command(self, value):
         # Initialize the request
         # Close the gripper
         req = SendGripperCommandRequest()
@@ -364,28 +392,15 @@ class FullArmMovement:
             time.sleep(0.5)
             return True
 
-    def send_cartesian_pose(self, pose: PoseStamped):
+    def send_cartesian_pose(self, pose: KinovaPose):
         '''
         input: pose (PoseStamped)
         output: success (bool)
         takes in a pose and moves the arm to that pose in cartesian space
         '''
         self.last_action_notif_type = None
-
-        waypoints = []
-
-        theta_x, theta_y, theta_z = tf.transformations.euler_from_quaternion((
-            pose.pose.orientation.x, pose.pose.orientation.y,
-            pose.pose.orientation.z, pose.pose.orientation.w))
-
-        waypoints.append(pose.pose.position.x,  
-                            pose.pose.position.y,  
-                            pose.pose.position.z , 
-                            math.degrees(theta_x), 
-                            math.degrees(theta_y),
-                            math.degrees(theta_z))
         
-        return self.traverse_waypoints(waypoints)
+        return self.traverse_waypoints([pose])
 
     def main(self):
         # For testing purposes
@@ -415,7 +430,7 @@ class FullArmMovement:
             # Example of gripper command
             # Let's fully open the gripper
             if self.is_gripper_present:
-                success &= self.send_gripper_command(0.0)
+                success &= self.execute_gripper_command(0.0)
             else:
                 rospy.logwarn("No gripper is present on the arm.")  
             #*******************************************************************************
@@ -439,7 +454,7 @@ class FullArmMovement:
             # Example of gripper command
             # Let's close the gripper at 50%
             if self.is_gripper_present:
-                success &= self.send_gripper_command(0.5)
+                success &= self.execute_gripper_command(0.5)
             else:
                 rospy.logwarn("No gripper is present on the arm.")    
             #*******************************************************************************

@@ -3,14 +3,16 @@
 import rospy
 from abc import ABC, abstractmethod
 from typing import Type, TypeVar
-
+from robothon2023.full_arm_movement import FullArmMovement
+from robothon2023.transform_utils import TransformUtils
 
 
 class AbstractAction(ABC):
 
     #ToDo use TypeVar and add typing for arm variable 
-    def __init__(self, arm) -> None:
+    def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
         self.arm = arm
+        self.transform_utils = transform_utils
 
     @abstractmethod
     def pre_perceive(self) -> bool:

@@ -1,5 +1,11 @@
 # Robothon2023
 
+<p align="center">
+  <img src="https://user-images.githubusercontent.com/47410011/230381047-89bfc69f-f113-4c27-846f-17bbb7ae878f.jpg" width=20% />
+  <img src="https://user-images.githubusercontent.com/47410011/230386146-407067bd-04dd-4105-892f-4292a32af506.jpg" width=38% />
+  <br></br>
+</p>
+
 ## Dependencies
 
 - [kortex](https://github.com/Kinovarobotics/kortex)
