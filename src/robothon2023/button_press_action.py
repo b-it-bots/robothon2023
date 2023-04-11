@@ -3,10 +3,14 @@
 #
 import rospy
 import tf
+from robothon2023.full_arm_movement import FullArmMovement
 from robothon2023.abstract_action import AbstractAction
 from robothon2023.transform_utils import TransformUtils
 from geometry_msgs.msg import PoseStamped, Quaternion
 import kortex_driver.msg
+import math
+from utils.kinova_pose import get_kinovapose_from_pose_stamped
+import numpy as np
 
 class ButtonPressAction(AbstractAction):
     """
@@ -48,13 +52,15 @@ class ButtonPressAction(AbstractAction):
         msg = self.transform_utils.transformed_pose_with_retries(msg, 'base_link')
         #debug_pose = copy.deepcopy(msg)
         #self.debug_pose_pub.publish(debug_pose)
-        self.arm.send_cartesian_pose(debug_pose)
+        kinova_pose = get_kinovapose_from_pose_stamped(msg)
+        self.arm.send_cartesian_pose(kinova_pose)
         return True
 
     def act(self) -> bool:
         print ("in act")
         linear_vel_z = rospy.get_param("~linear_vel_z", 0.005)
         force_z_diff_threshold = rospy.get_param("~force_z_diff_threshold", 3.0)
+        force_control_loop_rate = rospy.Rate(rospy.get_param("~force_control_loop_rate", 10.0))
         stop = False
         self.current_force_z = []
         num_retries = 0
@@ -64,7 +70,7 @@ class ButtonPressAction(AbstractAction):
                 if num_retries > 100:
                     rospy.logerr("No force measurements received")
                     break
-                self.loop_rate.sleep()
+                force_control_loop_rate.sleep()
                 continue
             msg = kortex_driver.msg.TwistCommand()
             msg.twist.linear_z = -linear_vel_z
@@ -74,17 +80,30 @@ class ButtonPressAction(AbstractAction):
             self.cart_vel_pub.publish(msg)
             if stop:
                 break
-            self.loop_rate.sleep()
+            force_control_loop_rate.sleep()
         msg = kortex_driver.msg.TwistCommand()
         msg.twist.linear_z = linear_vel_z
-        for idx in range(5):
+        for idx in range(10):
             self.cart_vel_pub.publish(msg)
-            self.loop_rate.sleep()
+            force_control_loop_rate.sleep()
         msg.twist.linear_z = 0.0
         self.cart_vel_pub.publish(msg)
-        self.loop_rate.sleep()
+        force_control_loop_rate.sleep()
+        rospy.sleep(0.1)
         return True
 
     def verify(self) -> bool:
         print ("in verify")
+
+        ## Getting Pose of the gui verify link
+        msg = PoseStamped()
+        msg.header.frame_id = 'gui_verify' #board link is the name of tf
+        msg.header.stamp = rospy.Time.now()
+        #make the z axis (blux in rviz) face below  by rotating around x axis
+        q = list(tf.transformations.quaternion_from_euler(math.pi, 0.0, math.pi/2))
+        msg.pose.orientation = Quaternion(*q)
+        # Creating a zero pose of the baord link and trasnforming it with respect to base link
+        msg = self.transform_utils.transformed_pose_with_retries(msg, 'base_link')
+        kinova_pose = get_kinovapose_from_pose_stamped(msg)
+        self.arm.send_cartesian_pose(kinova_pose)
         return True
