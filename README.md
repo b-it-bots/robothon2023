@@ -41,7 +41,8 @@ Visualize stuff in Rviz using [config/robothon.rviz](config/robothon.rviz)
 # Manipulation First step 
 ## Button Press example 
 
-> :warning: ** Below command will move the robot to holding position then moves down **
+> :warning: **Below command will move the robot to holding position then moves down**
+  
 > :warning: check the mockup gui and adjust the board_link by verifying in rviz
 
 ```
