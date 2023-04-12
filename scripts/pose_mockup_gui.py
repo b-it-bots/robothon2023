@@ -1,10 +1,12 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 """
 This module contains a component that publishes an artificial object pose.
 
 """
 # -*- encoding: utf-8 -*-
 
+import os
+import json
 import math
 import threading
 import tkinter as Tkinter
@@ -16,8 +18,8 @@ import visualization_msgs.msg
 
 LINEAR_RESOLUTION = 0.005  # in meters
 MAX_POSITION_X = 0.9  # in meters
-MIN_POSITION_X = -0.9  # in meters
-MAX_POSITION_Y = 0.3  # in meters
+MIN_POSITION_X = -0.3  # in meters
+MAX_POSITION_Y = 0.9  # in meters
 MIN_POSITION_Y = -0.3  # in meters
 MAX_POSITION_Z = -0.3  # in meters
 MIN_POSITION_Z = 0.6  # in meters
@@ -26,6 +28,8 @@ MIN_ORIENTATION = 0  # in degrees
 MAX_ORIENTATION = 359  # in degrees
 
 TRANSPARENCY = 0.5
+
+TMP_FILE_PATH = '/tmp/pose_mockup_gui_values.txt'
 
 POSE_MARKER = visualization_msgs.msg.Marker()
 POSE = geometry_msgs.msg.PoseStamped()
@@ -110,6 +114,32 @@ def create_window():
     )
     yaw.grid(row=1, column=2)
 
+    if os.path.exists(TMP_FILE_PATH):
+        print ("Previous values exists , Reading them")
+        with open(TMP_FILE_PATH, "r") as f:
+            #Read the variable from file
+            loaded_dict = json.load(f)
+            print (loaded_dict)
+            POSE.pose.position.x = float(loaded_dict["x"])
+            POSE.pose.position.y = float(loaded_dict["y"])
+            POSE.pose.position.z = float(loaded_dict["z"])
+
+            POSE_MARKER.pose.position.x = float(loaded_dict["x"])
+            POSE_MARKER.pose.position.y = float(loaded_dict["y"])
+            POSE_MARKER.pose.position.z = float(loaded_dict["z"])
+            
+
+            ROLL_VALUE = float(loaded_dict["roll"])
+            PITCH_VALUE = float(loaded_dict["pitch"])
+            YAW_VALUE = float(loaded_dict["yaw"])
+
+            linear_scale_x.set(float(loaded_dict["x"]))
+            linear_scale_y.set(float(loaded_dict["y"]))
+            linear_scale_z.set(float(loaded_dict["z"]))
+            roll.set(ROLL_VALUE)
+            pitch.set(PITCH_VALUE)
+            yaw.set(YAW_VALUE)
+
     master.title("Pose mock-up")
     master.mainloop()
     rospy.signal_shutdown("GUI closed")
@@ -192,6 +222,7 @@ def publish_pose():
     Publishes the target pose.
 
     """
+    print ("Publish POSe ")
     # node cycle rate (in hz)
     loop_rate = rospy.Rate(rospy.get_param("~loop_rate", 10))
 
@@ -225,6 +256,8 @@ def publish_pose():
     POSE_MARKER.color.b = 1.0
     POSE_MARKER.color.a = transparency
 
+    br = tf.TransformBroadcaster()
+
 
     while not rospy.is_shutdown():
         quaternion = tf.transformations.quaternion_from_euler(
@@ -253,18 +286,33 @@ def publish_pose():
                             rospy.Time.now(),
                             "board_link",
                             "base_link")
+
+        #Saving the pose in the json file
+        with open(TMP_FILE_PATH, "w") as f:
+            json.dump({"x": POSE.pose.position.x, 
+                "y": POSE.pose.position.y,
+                "z": POSE.pose.position.z,
+                "roll": ROLL_VALUE,
+                "pitch": PITCH_VALUE,
+                "yaw": YAW_VALUE}, f)
+
         loop_rate.sleep()
 
 
 def main():
+    print ("started ")
     rospy.init_node("target_pose_mock_up")
 
-    import _thread as thread
 
     try:
-        thread.start_new_thread(create_window, tuple())
+        #thread.start_new_thread(create_window, tuple())
+        threading.Thread(target=create_window).start()
+        rospy.sleep(1.0)
 
         publish_pose()
     except rospy.ROSInterruptException:
+        rospy.logerror(" ERROR in starting Thread publish pose")
         pass
 
+if __name__ == "__main__":
+    main()

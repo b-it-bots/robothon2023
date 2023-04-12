@@ -32,19 +32,29 @@
 
 ```
 roslaunch kortex_driver kortex_driver.launch
-roslaunch robothon2023 task_board_detector.launch
+roslaunch robothon2023 task_board_detector.launch use_mockup:=true  #if you want to use the mockup or use the vision 
 roslaunch kinova_vision kinova_vision_rgbd.launch
 ```
 
 Visualize stuff in Rviz using [config/robothon.rviz](config/robothon.rviz)
 
 # Manipulation First step 
-# Moving above the board_link frame
+## Button Press example 
 
-> :warning: ** Below command will move the robot to holding position then moves down **
+> :warning: **Below command will move the robot to holding position then moves down**
+  
+> :warning: check the mockup gui and adjust the board_link by verifying in rviz
 
 ```
-roslaunch robothon2023 kinova_arm.launch
+roslaunch robothon2023 button_press_test.launch
 ```
+### Expected behaviour
+* The arm moves above the button
+* Moves slowly in velocity mode in down direction 
+* The button is pressed and then the arm moves up
+* Arm moves on top of the graphical interface
+
+
+
 
 

@@ -9,6 +9,8 @@ import math
 from geometry_msgs.msg import PoseStamped, Quaternion
 from std_msgs.msg import String
 from robothon2023.full_arm_movement import FullArmMovement
+from robothon2023.transform_utils import TransformUtils
+from utils.kinova_pose import get_kinovapose_from_pose_stamped
 import kortex_driver.msg
 import numpy as np
 from kortex_driver.srv import *
@@ -20,6 +22,7 @@ class PickAndPlace(object):
 
     def __init__(self):
         self.fam = FullArmMovement()
+        self.tu = TransformUtils()
         self.boundary_safety = rospy.get_param("~boundary_safety", None)
         self.joint_angles = rospy.get_param("~joint_angles", None)
         self.trajectories = rospy.get_param("~trajectories", None)
@@ -68,11 +71,29 @@ class PickAndPlace(object):
         # either because of a camera calibration offset or something to do with the reference frame for sending Cartesian poses
 #        msg.pose.position.x += 0.01
         # Creating a zero pose of the baord link and trasnforming it with respect to base link
-        msg = self.fam.get_transformed_pose(msg, 'base_link')
+        msg = self.tu.transformed_pose_with_retries(msg, 'base_link')
         print (msg)
         debug_pose = copy.deepcopy(msg)
         self.debug_pose_pub.publish(debug_pose)
-        self.fam.send_cartesian_pose(debug_pose)
+        # self.fam.send_cartesian_pose(debug_pose)
+    
+    def test_go_to_plug(self):
+        pre_height_above_button = rospy.get_param("~pre_height_above_button", 1.00)
+        msg = PoseStamped()
+        msg.header.frame_id = 'meter_plug_black_link'
+        msg.header.stamp = rospy.Time.now()
+        #make the z axis (blux in rviz) face below  by rotating around x axis
+        q = list(tf.transformations.quaternion_from_euler(math.pi, 0.0, math.pi/2))
+        msg.pose.orientation = Quaternion(*q)
+        msg.pose.position.z += pre_height_above_button
+        if self.tu.transformed_pose_with_retries(msg, 'base_link'):
+            msg = self.tu.transformed_pose_with_retries(msg, 'base_link')
+            # print(msg)
+            self.debug_pose_pub.publish(msg)
+            kinovappose = get_kinovapose_from_pose_stamped(msg)
+            self.fam.send_cartesian_pose(kinovappose)
+        else:
+            rospy.logerr("No transform found")
 
     def test_press_button(self):
         linear_vel_z = rospy.get_param("~linear_vel_z", 0.005)
@@ -213,16 +234,17 @@ class PickAndPlace(object):
         # self.fam.test_send_joint_angles(self.joint_angles["vertical_pose"])
         print (self.joint_angles['perceive_table'])
         self.fam.send_joint_angles(self.joint_angles["perceive_table"])
-        self.fam.send_gripper_command(0.0) #Open the gripper 
+        self.fam.execute_gripper_command(0.0) #Open the gripper 
         #self.fam.example_send_gripper_command(0.5) #half close the gripper 
-        self.fam.send_gripper_command(0.9) #full close the gripper 
+        self.fam.execute_gripper_command(0.9) #full close the gripper 
         rospy.sleep(2.0)
 
 
 if __name__ == "__main__":
     rospy.init_node('pick_and_place')
     PAP = PickAndPlace()
-    PAP.test_go_to_board()
-    PAP.test_press_button()
+    # PAP.test_go_to_plug()
+    # PAP.test_go_to_board()
+    # PAP.test_press_button()
     rospy.spin()
 
