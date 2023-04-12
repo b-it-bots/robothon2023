@@ -75,7 +75,9 @@ class FullArmMovement:
         rospy.wait_for_service(validate_waypoint_list_full_name)
         self.validate_waypoint_list = rospy.ServiceProxy(validate_waypoint_list_full_name, ValidateWaypointList)
 
-
+        apply_emergency_stop = '/' + self.robot_name + '/base/apply_emergency_stop'
+        rospy.wait_for_service(apply_emergency_stop)
+        self.apply_E_STOP = rospy.ServiceProxy(apply_emergency_stop, ApplyEmergencyStop)
 
     def cb_action_topic(self, notif):
         self.last_action_notif_type = notif.action_event
@@ -261,6 +263,17 @@ class FullArmMovement:
             return False
         else:
             rospy.loginfo("Cleared the faults successfully")
+            rospy.sleep(2.5)
+            return True
+        
+    def apply_E_stop(self):
+        try:
+            self.apply_E_STOP()
+        except rospy.ServiceException:
+            rospy.logerr("Failed to call E-stop")
+            return False
+        else:
+            rospy.loginfo("ROBOT Stopped successfully")
             rospy.sleep(2.5)
             return True
 
