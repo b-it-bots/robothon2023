@@ -329,7 +329,6 @@ class FullArmMovement:
         waypoint = Waypoint()
         angularWaypoint = AngularWaypoint()
 
-        # Angles to send the arm to vertical position (all zeros)
         for i in range(self.degrees_of_freedom):
             angularWaypoint.angles.append(joint_angles[i])
 
@@ -374,7 +373,7 @@ class FullArmMovement:
         req.input.oneof_action_parameters.execute_waypoint_list.append(trajectory)
         
         # Send the angles
-        rospy.loginfo("Sending the robot vertical...")
+        rospy.loginfo("Sending the robot to the given joint angles...")
         try:
             self.execute_action(req)
         except rospy.ServiceException:
