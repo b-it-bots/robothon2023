@@ -18,25 +18,18 @@ import kortex_driver
 from kortex_driver.srv import *
 from kortex_driver.msg import *
 
+from robothon2023.full_arm_movement import FullArmMovement
+
 class ForceMeasurmement:
 
-    def __init__(self, force_threshold: list = [5, 5, 5], topic_name: String = "None"):
+    def __init__(self, force_threshold: list = [10, 10, 10], topic_name: String = "None"):
         self._force_subscriber = rospy.Subscriber("/my_gen3/base_feedback", kortex_driver.msg.BaseCyclic_Feedback, self._force_callback)
-        self.pub_force_status = rospy.Publisher('my_gen3/end_effector_force_status'+'/'+topic_name, Int16MultiArray, queue_size=5)
+        self.pub_force_status = rospy.Publisher('/my_gen3/end_effector_force_status'+'/'+topic_name, Int16MultiArray, queue_size=5)
         self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
         self._force = None
         self._force_threshold = force_threshold 
 
-        self.robot_name = rospy.get_param('~robot_name', "my_gen3")
-
-        apply_emergency_stop = '/' + self.robot_name + '/base/clear_faults'
-        rospy.wait_for_service(apply_emergency_stop)
-        self.apply_E_STOP = rospy.ServiceProxy(apply_emergency_stop, Base_ApplyEmergencyStop)
-
-        self.apply_E_STOP()
-        rospy.loginfo("Emergency stop applied")
-
-        self.velocity_vector = velocity_vector
+        self.fam = FullArmMovement()
 
     def _force_callback(self, msg):
         self._force = [msg.base.tool_external_wrench_force_x, 
@@ -95,10 +88,10 @@ class ForceMeasurmement:
         # bool_array.data = data
         # self.pub_force_status.publish(bool_array)
 
-
         if data[0] == 1 or data[1] == 1 or data[2] == 1:
-            self.apply_E_STOP()
-
+            self.fam.apply_E_STOP()
+            # self.fam.clear_faults()
+    
     # Returns the force measured by the robot
     def get_force(self):
         return self._force
