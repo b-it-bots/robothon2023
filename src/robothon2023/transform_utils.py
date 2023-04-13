@@ -31,14 +31,14 @@ class TransformUtils(object):
                                       target_frame: str,
                                       retries  : int = 5,
                                       execute_arm: bool = False,
-                                      offset: List[float, float, float] = []) -> Union[PoseStamped, None]:
+                                      offset: List[float] = [0., 0., 0.]) -> Union[PoseStamped, None]:
         """ Transform pose with multiple retries
-        
+
         input reference_pose: The reference pose.
         input target_frame: The name of the taget frame.
         input retries: The number of retries.
         input execute_arm: If true, the pose will be rotated by 180 degrees around the x axis.
-        input offset: The offset to be added to the pose if execute_arm is true.
+        input offset: [r, p, y] offset in deg to be added to the pose if execute_arm is true.
 
         :return: The updated state.
         :rtype: geometry_msgs.msg.PoseStamped or None
