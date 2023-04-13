@@ -215,7 +215,7 @@ class FullArmMovement:
         '''
         feedback = rospy.wait_for_message("/" + self.robot_name + "/base_feedback", BaseCyclic_Feedback)
 
-        current_pose = KinovaPose()
+        current_pose = KinovaPose(0, 0, 0, 0, 0, 0)
         current_pose.x = feedback.base.commanded_tool_pose_x
         current_pose.y = feedback.base.commanded_tool_pose_y
         current_pose.z = feedback.base.commanded_tool_pose_z
@@ -329,6 +329,8 @@ class FullArmMovement:
         trajectory.use_optimal_blending = False
         trajectory.waypoints.append(waypoint)
 
+        print(trajectory.waypoints)
+
         try:
             res = self.validate_waypoint_list(trajectory)
         except rospy.ServiceException:
@@ -359,7 +361,7 @@ class FullArmMovement:
         req.input.oneof_action_parameters.execute_waypoint_list.append(trajectory)
         
         # Send the angles
-        rospy.loginfo("Sending the robot vertical...")
+        rospy.loginfo("Sending the robot to joint angles...")
         try:
             self.execute_action(req)
         except rospy.ServiceException:
