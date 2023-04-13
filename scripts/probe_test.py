@@ -218,11 +218,17 @@ class ProbeTest(object):
         self.fam.send_joint_angles(self.joint_angles["perceive_table"])
         self.fam.execute_gripper_command(0.0) #Open the gripper 
         #self.fam.example_execute_gripper_command(0.5) #half close the gripper 
-        self.fam.execute_gripper_command(0.9) #full close the gripper 
+        self.fam.execute_gripper_command(0.9) #full close the gripper
+        self.fam.execute_gripper_command(0.0) #Open the gripper
         rospy.sleep(2.0)
 
     def test(self):
-        self.probe_action.do()
+        s = self.probe_action.do()
+        
+        # if s then exit
+        if s:
+            print("Exiting")
+            exit(0)
 
 
 if __name__ == "__main__":
@@ -232,4 +238,5 @@ if __name__ == "__main__":
     # PAP.test_go_to_board()
     # PAP.test_press_button()
     rospy.spin()
+    exit(0)
 
