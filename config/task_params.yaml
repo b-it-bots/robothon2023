@@ -2,3 +2,4 @@ pre_height_above_button: 0.1
 linear_vel_z: 0.01 # positive going up, negative going down; NOTE: changing this affects force_z_diff_threshold. Low velocities are more stable
 force_z_diff_threshold: 3.0 # if diff between current force and mean force is greater, stop
 probe_holder_pose: [0.5991508364677429, -0.01071108877658844, 0.12583768367767334, 90.0, 0.0, 90.0]
+magnet_pose: [0.4748101830482483, 0.0050267670303583145, 0.02775835245847702, 0.0, 180.0, 90.0]
