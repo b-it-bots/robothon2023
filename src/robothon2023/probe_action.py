@@ -25,9 +25,9 @@ class ProbeAction(AbstractAction):
         return True
 
     def act(self) -> bool:
-        # success = self.place_probe_in_holder()
+        success = self.place_probe_in_holder()
 
-        success = self.pick_magnet()
+        # success = self.pick_magnet()
         
         return success
 
@@ -63,7 +63,7 @@ class ProbeAction(AbstractAction):
         print('[probe_action] reached probe initial position')
         
         # close the gripper
-        success = self.arm.execute_gripper_command(0.9)
+        success = self.arm.execute_gripper_command(1.0)
 
         if not success:
             rospy.logerr("Failed to close the gripper")
@@ -129,7 +129,8 @@ class ProbeAction(AbstractAction):
         current_pose = self.arm.get_current_pose()
 
         # move down a bit
-        current_pose.z -= 0.05
+        current_pose.z -= 0.105
+        current_pose.x += 0.005
 
         success = self.arm.send_cartesian_pose(current_pose)
 
@@ -202,10 +203,12 @@ class ProbeAction(AbstractAction):
         door_knob_kinova_pose = get_kinovapose_from_pose_stamped(door_knob_pose)
 
         # move up a bit
-        door_knob_kinova_pose.z += 0.028
+        door_knob_kinova_pose.z += 0.025
 
         # send the door knob pose to the arm
         print("[probe_action] moving to door knob position")
+        print("[probe_action] door knob pose: {}".format(door_knob_kinova_pose))
+
         success = self.arm.send_cartesian_pose(door_knob_kinova_pose)
 
         if not success:
@@ -214,15 +217,31 @@ class ProbeAction(AbstractAction):
         
         print("[probe_action] reached door knob position")
 
-        linear_vel_z = 0.0025
+        # linear_vel_z = 0.0025
+        vel = 0.01
 
-        print("[probe_action] moving up with linear velocity: {}".format(linear_vel_z))
+        angle = 55.0
+
+        linear_vel_z = vel*math.sin(math.radians(angle))
+        linear_vel_y = vel*math.cos(math.radians(angle))
+
+        print("[probe_action] moving up with linear_z velocity: {}".format(linear_vel_z))
+        print("[probe_action] moving up with linear_y velocity: {}".format(-linear_vel_y))
         msg = kortex_driver.msg.TwistCommand()
         msg.twist.linear_z = linear_vel_z
+        msg.twist.linear_x = 0.0
+        msg.twist.linear_y = -linear_vel_y
+        msg.duration = 20
         self.cart_vel_pub.publish(msg)
-        rospy.sleep(5)
+        rospy.sleep(21)
         msg.twist.linear_z = 0.0
+        msg.twist.linear_x = 0.0
+        msg.twist.linear_y = 0.0
+
         self.cart_vel_pub.publish(msg)
+
+        self.arm.clear_faults()
+        self.arm.subscribe_to_a_robot_notification()
     
         # get current pose of the arm
         current_pose = self.arm.get_current_pose()

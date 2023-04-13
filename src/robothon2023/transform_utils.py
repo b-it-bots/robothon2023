@@ -59,7 +59,7 @@ class TransformUtils(object):
                 transformed_pose.pose.orientation.z,
                 transformed_pose.pose.orientation.w]
             )
-            q = tf.transformations.quaternion_from_euler(math.pi + offset[0], offset[1], euler[2] + offset[2])
+            q = tf.transformations.quaternion_from_euler(math.pi + offset[0], offset[1]+euler[1], euler[2] + offset[2])
             transformed_pose.pose.orientation = Quaternion(*q)
 
         return transformed_pose
