@@ -5,8 +5,11 @@
 
 from __future__ import print_function
 import tf
+import  math
 
-from geometry_msgs.msg import PoseStamped
+from typing import List
+
+from geometry_msgs.msg import PoseStamped, Quaternion
 from typing import Union
 import rospy
 
@@ -26,8 +29,16 @@ class TransformUtils(object):
 
     def transformed_pose_with_retries(self, reference_pose: PoseStamped, 
                                       target_frame: str,
-                                      retries  : int = 5) -> Union[PoseStamped, None]:
+                                      retries  : int = 5,
+                                      execute_arm: bool = False,
+                                      offset: List[float, float, float] = []) -> Union[PoseStamped, None]:
         """ Transform pose with multiple retries
+        
+        input reference_pose: The reference pose.
+        input target_frame: The name of the taget frame.
+        input retries: The number of retries.
+        input execute_arm: If true, the pose will be rotated by 180 degrees around the x axis.
+        input offset: The offset to be added to the pose if execute_arm is true.
 
         :return: The updated state.
         :rtype: geometry_msgs.msg.PoseStamped or None
@@ -38,6 +49,18 @@ class TransformUtils(object):
             transformed_pose = self.transform_pose(reference_pose, target_frame)
             if transformed_pose:
                 break
+        
+        if execute_arm:
+            # rotate around z axis by 90 degrees
+            euler = tf.transformations.euler_from_quaternion(
+                [transformed_pose.pose.orientation.x,
+                transformed_pose.pose.orientation.y,
+                transformed_pose.pose.orientation.z,
+                transformed_pose.pose.orientation.w]
+            )
+            q = tf.transformations.quaternion_from_euler(math.pi + offset[0], offset[1], euler[2] + offset[2])
+            transformed_pose.pose.orientation = Quaternion(*q)
+
         return transformed_pose
 
     def transform_pose(self, reference_pose: PoseStamped, 
@@ -95,7 +118,7 @@ class TransformUtils(object):
         # Convert the translation and rotation to a PoseStamped message
         pose_msg = PoseStamped()
         pose_msg.header.stamp = rospy.Time.now()
-        pose_msg.header.frame_id = '/map'
+        pose_msg.header.frame_id = source_link
         pose_msg.pose.position.x = trans[0]
         pose_msg.pose.position.y = trans[1]
         pose_msg.pose.position.z = trans[2]
