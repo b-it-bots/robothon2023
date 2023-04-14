@@ -3,6 +3,7 @@
 import rospy
 from robothon2023.abstract_action import AbstractAction
 from geometry_msgs.msg import PoseStamped, Quaternion
+from sensor_msgs.msg import Image
 from robothon2023.full_arm_movement import FullArmMovement
 from robothon2023.transform_utils import TransformUtils
 from utils.kinova_pose import KinovaPose, get_kinovapose_from_list, get_kinovapose_from_pose_stamped
@@ -12,13 +13,18 @@ from kortex_driver.msg import *
 
 import tf
 import math
+import cv2
+import cv_bridge
+import numpy as np
 
 class ProbeAction(AbstractAction):
     def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
         super().__init__(arm, transform_utils)
         self.cart_vel_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
         self.door_knob_pose_pub = rospy.Publisher("/door_knob_pose", PoseStamped, queue_size=1)
-        self.loop_rate = rospy.Rate(10.0)
+        self.probe_cable_dir_debug_pub = rospy.Publisher('/probe_cable_dir_debug', Image, queue_size=1)
+        self.debug = rospy.get_param("~debug", False)
+        self.bridge = cv_bridge.CvBridge()
 
     def pre_perceive(self) -> bool:
         print ("in pre perceive")        
@@ -26,9 +32,9 @@ class ProbeAction(AbstractAction):
         return True
 
     def act(self) -> bool:
-        # success = self.place_probe_in_holder()
-        success = self.pick_magnet()
-        # success = self.push_door()
+        success = self.place_probe_in_holder()
+
+        # success = self.pick_magnet()
         
         return success
 
@@ -420,3 +426,141 @@ class ProbeAction(AbstractAction):
 
         return True
 
+
+    
+    def pick_probe(self):
+        
+        # go to the probe pre-pick position above the holder
+        probe_holder_pick_pre_pose = rospy.get_param("~probe_holder_pick_pre_pose")
+        probe_holder_pick_pre_kinova_pose = get_kinovapose_from_list(probe_holder_pick_pre_pose)
+        
+        print("[probe_action] moving to probe holder pick pre position")
+        success = self.arm.send_cartesian_pose(probe_holder_pick_pre_kinova_pose)
+
+        if not success:
+            rospy.logerr("Failed to move to the probe holder pick pre position")
+            return False
+        
+        print("[probe_action] reached probe holder pick pre position")
+
+        # get an image from the camera
+        image_msg = rospy.wait_for_message("/camera/color/image_raw", Image)
+        image = self.bridge.imgmsg_to_cv2(image_msg, "bgr8")
+        
+        # get the probe cable direction
+        probe_cable_dir = self.get_probe_cable_dir(image)
+
+        if probe_cable_dir > 0:
+            probe_cable_dir += 90
+        elif probe_cable_dir < 0:
+            probe_cable_dir = -probe_cable_dir
+        
+        # get the probe pick from holder pose
+        probe_pick_from_holder_pose = rospy.get_param("~probe_pick_from_holder_pose")
+        probe_pick_from_holder_kinova_pose = get_kinovapose_from_list(probe_pick_from_holder_pose)
+
+        pre_pick_pose = probe_pick_from_holder_kinova_pose
+        pre_pick_pose.z = probe_holder_pick_pre_kinova_pose.z
+
+        # move to the pre pick pose
+        print("[probe_action] moving to probe pre pick position")
+        success = self.arm.send_cartesian_pose(pre_pick_pose)
+
+        if not success:
+            rospy.logerr("Failed to move to the probe pre pick position")
+            return False
+        
+        print("[probe_action] reached probe pre pick position")
+
+        probe_pick_from_holder_pose = rospy.get_param("~probe_pick_from_holder_pose")
+        probe_pick_from_holder_kinova_pose = get_kinovapose_from_list(probe_pick_from_holder_pose)
+        # rotate the arm to the probe cable direction
+        probe_pick_from_holder_kinova_pose.theta_z_deg = probe_cable_dir
+
+        # move to the probe pick from holder pose
+        print("[probe_action] moving to probe pick from holder position")
+        success = self.arm.send_cartesian_pose(probe_pick_from_holder_kinova_pose)
+
+        if not success:
+            rospy.logerr("Failed to move to the probe pick from holder position")
+            return False
+        
+        print("[probe_action] reached probe pick from holder position")
+
+        # close the gripper
+        success = self.arm.execute_gripper_command(1.0)
+
+        if not success:
+            rospy.logerr("Failed to close the gripper")
+            return False
+        
+        # move up a bit
+        probe_pick_from_holder_kinova_pose.z += 0.15
+
+        success = self.arm.send_cartesian_pose(probe_pick_from_holder_kinova_pose)
+
+        if not success:
+            rospy.logerr("Failed to move up the probe")
+            return False
+        
+        print("[probe_action] probe picked")
+
+        return True
+
+
+    def get_probe_cable_dir(self, image: cv2.Mat):
+        '''
+        This function takes an image of the probe cable and returns the direction of the cable
+        return: angle in degrees (in cv coordinate system)
+        '''
+
+        # crop the border of the image by 25%
+        image = image[int(image.shape[0]*0.25):int(image.shape[0]*0.75), int(image.shape[1]*0.25):int(image.shape[1]*0.75)]
+
+        # Convert image to HSV
+        hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        # find the orange object in the image 
+        lower_orange = np.array([0, 100, 100])
+        upper_orange = np.array([10, 255, 255])
+        mask = cv2.inRange(hsv, lower_orange, upper_orange)
+
+        # draw the contours of the orange object in the image
+        contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
+
+        # filter the small contours
+        contours = [c for c in contours if cv2.contourArea(c) > 100]
+
+        # plot the center of the orange object in the image
+        M = cv2.moments(contours[0])
+        cX = int(M["m10"] / M["m00"])
+        cY = int(M["m01"] / M["m00"])
+
+        # find the direction of the black cable from the center of the orange object
+        lower_black = np.array([0, 0, 0])
+        upper_black = np.array([180, 255, 30])
+        mask = cv2.inRange(hsv, lower_black, upper_black)
+
+        contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        contours = [c for c in contours if cv2.contourArea(c) > 100]
+        cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
+
+        M = cv2.moments(contours[0])
+        bX = int(M["m10"] / M["m00"])
+        bY = int(M["m01"] / M["m00"])
+
+        # plot the direction of the cable with an arrow
+        cv2.arrowedLine(image, (cX, cY), (bX, bY), (255, 0, 0), 2)
+
+        # print the angle of the cable direction wrt center
+        angle = math.atan2(bY - cY, bX - cX) * 180.0 / math.pi
+
+        # plot the angle of the cable direction wrt center
+        cv2.putText(image, "angle: {:.2f} degrees".format(angle), (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
+        # publish the debug image to the topic
+        if self.debug:
+            self.probe_cable_dir_debug_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
+
+        return angle
