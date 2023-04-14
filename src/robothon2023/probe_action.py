@@ -21,6 +21,7 @@ class ProbeAction(AbstractAction):
     def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
         super().__init__(arm, transform_utils)
         self.cart_vel_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
+        self.door_knob_pose_pub = rospy.Publisher("/door_knob_pose", PoseStamped, queue_size=1)
         self.probe_cable_dir_debug_pub = rospy.Publisher('/probe_cable_dir_debug', Image, queue_size=1)
         self.debug = rospy.get_param("~debug", False)
         self.bridge = cv_bridge.CvBridge()
@@ -31,11 +32,9 @@ class ProbeAction(AbstractAction):
         return True
 
     def act(self) -> bool:
-        # success = self.place_probe_in_holder()
+        success = self.place_probe_in_holder()
 
         # success = self.pick_magnet()
-
-        success =  self.pick_probe()
         
         return success
 
@@ -205,13 +204,16 @@ class ProbeAction(AbstractAction):
         msg = PoseStamped()
         msg.header.frame_id = "door_knob_link"
         msg.header.stamp = rospy.Time(0)
+        msg.pose.position.x -= 0.015
+        msg.pose.orientation.z += 180
+
         door_knob_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True)
 
         # convert the door knob pose to a kinova pose
         door_knob_kinova_pose = get_kinovapose_from_pose_stamped(door_knob_pose)
 
         # move up a bit
-        door_knob_kinova_pose.z += 0.025
+        door_knob_kinova_pose.z += 0.022
 
         # send the door knob pose to the arm
         print("[probe_action] moving to door knob position")
@@ -226,25 +228,35 @@ class ProbeAction(AbstractAction):
         print("[probe_action] reached door knob position")
 
         # linear_vel_z = 0.0025
-        vel = 0.01
+        vel = 0.05
 
-        angle = 55.0
+        angle = 45.0
 
         linear_vel_z = vel*math.sin(math.radians(angle))
         linear_vel_y = vel*math.cos(math.radians(angle))
+        angular_vel_y = 0.1
 
         print("[probe_action] moving up with linear_z velocity: {}".format(linear_vel_z))
         print("[probe_action] moving up with linear_y velocity: {}".format(-linear_vel_y))
         msg = kortex_driver.msg.TwistCommand()
-        msg.twist.linear_z = linear_vel_z
-        msg.twist.linear_x = 0.0
-        msg.twist.linear_y = -linear_vel_y
-        msg.duration = 20
-        self.cart_vel_pub.publish(msg)
-        rospy.sleep(21)
+
+
+        for i in range(4):
+
+            msg.twist.linear_z = linear_vel_z 
+            msg.twist.linear_y = -linear_vel_y 
+            msg.twist.angular_y = angular_vel_y
+            self.cart_vel_pub.publish(msg)
+
+            linear_vel_z *= 0.18
+            angular_vel_y += 0.15
+
+            rospy.sleep(1)
+
         msg.twist.linear_z = 0.0
         msg.twist.linear_x = 0.0
         msg.twist.linear_y = 0.0
+        msg.twist.angular_y = 0.0
 
         self.cart_vel_pub.publish(msg)
 
@@ -267,6 +279,7 @@ class ProbeAction(AbstractAction):
         print("[probe_action] moving to magnet position")
         magnet_pose = rospy.get_param("~magnet_pose")
         magnet_kinova_pose = get_kinovapose_from_list(magnet_pose)
+        magnet_kinova_pose.theta_z_deg += 180.0
         success = self.arm.send_cartesian_pose(magnet_kinova_pose)
 
         if not success:
@@ -290,7 +303,130 @@ class ProbeAction(AbstractAction):
             return False
 
         print("[probe_action] target reached")
+
+    def push_door(self):  # push door is not cuurently used
+            # move arm above door knob position 
+
+
+            msg = PoseStamped()
+            msg.header.frame_id = "door_knob_rotated"
+            msg.header.stamp = rospy.Time(0)
+
+            msg.pose.position.x -= 0.075
+            msg.pose.position.z += 0.30
+
+            door_knob_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True)
+
+            print("Door knob pose:  ")
+            print(door_knob_pose)
+            self.door_knob_pose_pub.publish(door_knob_pose)
+
+            rospy.sleep(5)
+
+            success = self.arm.execute_gripper_command(1.0)
+
+            if not success:
+                rospy.logerr("Failed to open the gripper")
+                return False
+            
+
+            # convert the door knob pose to a kinova pose
+            door_knob_kinova_pose = get_kinovapose_from_pose_stamped(door_knob_pose)
+
+
+
+            print("Door knob kinova pose:  ")
+            print(door_knob_kinova_pose)
+
+            success = self.arm.send_cartesian_pose(door_knob_kinova_pose)
+
+            if not success:
+                rospy.logerr("Failed to go to up doorknob position")
+                return False
+
+            print("[probe_action] door knob UP position reached")
+
+
+            distance = 0.22 # m  (0.045 is the length the slider can travel and 0.005 is a small offset for safety reasons)
+            time = 5 # s
+
+            velocity = distance/time
+
+
+            approach_vel_msg = kortex_driver.msg.TwistCommand()
+
+            approach_vel_msg.twist.linear_z = -velocity
+            self.cart_vel_pub.publish(approach_vel_msg)
+            rospy.sleep(time)
+            self.stop_arm()
+
+            success = self.arm.execute_gripper_command(1.0)
+
+            if not success:
+                rospy.logerr("Failed to open the gripper")
+                return False
+
+            distance = 0.085     # m  (0.045 is the length the slider can travel and 0.005 is a small offset for safety reasons)
+            time = 6 # s
+
+            velocity = distance/time
+
+            msg = self.create_velocity(velocity,door_knob_pose)
+            self.cart_vel_pub.publish(msg)
+            rospy.sleep(time)
+            self.stop_arm()
+
+            self.arm.clear_faults()
+            self.arm.subscribe_to_a_robot_notification()
+
+            print("[probe_action] door pushed and process finished")
+
+            return True
+        
+
+    def create_velocity(self,velocity, pose):
+        """
+        Create Twist message from velocity vector
+
+        input: velocity vector :: np.array
+        output: velocity vector :: Twist
+        """
+
+
+        # convert pose.orientation to yaw
+        orientation = pose.pose.orientation
+        quaternion = (orientation.x, orientation.y, orientation.z, orientation.w)
+        euler = tf.transformations.euler_from_quaternion(quaternion)
+        yaw = euler[2]
+
+        print("yaw: ", yaw)
+
+        msg = kortex_driver.msg.TwistCommand()
+
+        msg.twist.linear_x = velocity * math.cos(yaw)
+        msg.twist.linear_y = velocity * math.sin(yaw)
+        msg.twist.linear_z = 0.0
+        msg.duration = 20
+        return msg
+    
+
+    def stop_arm(self):
+        """
+        Stop arm by sending zero velocity
+        """
+
+        velocity_vector = TwistCommand()
+        velocity_vector.twist.linear_x = 0.0
+        velocity_vector.twist.linear_y = 0.0
+        velocity_vector.twist.linear_z = 0.0
+        velocity_vector.twist.angular_x = 0.0
+        velocity_vector.twist.angular_y = 0.0
+        velocity_vector.twist.angular_z = 0.0
+        self.cart_vel_pub.publish(velocity_vector)
+
         return True
+
+
     
     def pick_probe(self):
         
