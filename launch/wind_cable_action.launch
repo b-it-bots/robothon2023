@@ -11,7 +11,7 @@
         <param name="robot_name" value="$(arg robot_name)"/>
     </node -->
 
-    <node pkg="robothon2023" type="probe_test.py" name="probe_test" output="screen">
+    <node pkg="robothon2023" type="wind_cable_test.py" name="wind_cable_test" output="screen">
         <rosparam command="load" file="$(find robothon2023)/config/joint_angles.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/boundary_safety.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/task_params.yaml"/>

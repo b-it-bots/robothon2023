@@ -33,9 +33,36 @@ class ProbeAction(AbstractAction):
         return True
 
     def act(self) -> bool:
-        # success = self.place_probe_in_holder()
-       
-        success = self.pick_magnet()
+        # pick the probe from the box and place it in the holder
+        success = self.place_probe_in_holder()
+
+        if not success:
+            rospy.logerr("[probe_action] Failed to place the probe in the holder")
+            return False
+        
+        # open the door with magnet
+        success = self.open_door()
+
+        if not success:
+            rospy.logerr("[probe_action] Failed to open the door")
+            return False
+        
+        # pick the probe from the holder
+        success = self.pick_probe_from_holder()
+        
+        # probe the circuit
+        success = self.probe_circuit()
+
+        if not success:
+            rospy.logerr("[probe_action] Failed to probe the circuit")
+            return False
+        
+        # place the probe somewhere safe
+        success = self.place_probe_safe()
+
+        if not success:
+            rospy.logerr("[probe_action] Failed to place the probe somewhere safe")
+            return False
         
         return success
 
@@ -194,39 +221,39 @@ class ProbeAction(AbstractAction):
                
         return velocity_vector
 
-    def pick_magnet(self):
-        # # get magnet pose from param server
-        # magnet_pose = rospy.get_param("~magnet_pose")
-        # magnet_kinova_pose = get_kinovapose_from_list(magnet_pose)
+    def open_door(self):
+        # get magnet pose from param server
+        magnet_pose = rospy.get_param("~magnet_pose")
+        magnet_kinova_pose = get_kinovapose_from_list(magnet_pose)
 
-        # # rotate the yaw by 180 degrees
-        # magnet_kinova_pose.theta_z_deg += 180.0
+        # rotate the yaw by 180 degrees
+        magnet_kinova_pose.theta_z_deg += 180.0
 
-        # # send magnet pose to the arm
-        # print("[probe_action] moving to magnet position")
-        # success = self.arm.send_cartesian_pose(magnet_kinova_pose)
+        # send magnet pose to the arm
+        print("[probe_action] moving to magnet position")
+        success = self.arm.send_cartesian_pose(magnet_kinova_pose)
 
-        # if not success:
-        #     rospy.logerr("Failed to move to the magnet position")
-        #     return False
+        if not success:
+            rospy.logerr("Failed to move to the magnet position")
+            return False
         
-        # print("[probe_action] reached magnet position")
+        print("[probe_action] reached magnet position")
 
-        # # close the gripper
-        # success = self.arm.execute_gripper_command(0.7)
+        # close the gripper
+        success = self.arm.execute_gripper_command(0.7)
 
-        # if not success:
-        #     rospy.logerr("Failed to close the gripper")
-        #     return False
+        if not success:
+            rospy.logerr("Failed to close the gripper")
+            return False
         
-        # # move up a bit
-        # magnet_kinova_pose.z += 0.3
+        # move up a bit
+        magnet_kinova_pose.z += 0.3
 
-        # success = self.arm.send_cartesian_pose(magnet_kinova_pose)
+        success = self.arm.send_cartesian_pose(magnet_kinova_pose)
 
-        # if not success:
-        #     rospy.logerr("Failed to move up the probe")
-        #     return False
+        if not success:
+            rospy.logerr("Failed to move up the probe")
+            return False
         
         # go to the door knob position
         # get the door knob position from tf
@@ -295,172 +322,48 @@ class ProbeAction(AbstractAction):
         self.arm.clear_faults()
         self.arm.subscribe_to_a_robot_notification()
     
-        # # get current pose of the arm
-        # current_pose = self.arm.get_current_pose()
+        # get current pose of the arm
+        current_pose = self.arm.get_current_pose()
 
-        # # go up by 5cm
-        # current_pose.z += 0.1
+        # go up by 5cm
+        current_pose.z += 0.1
 
-        # success = self.arm.send_cartesian_pose(current_pose)
+        success = self.arm.send_cartesian_pose(current_pose)
 
-        # if not success:
-        #     rospy.logerr("Failed to move up the probe")
-        #     return False
+        if not success:
+            rospy.logerr("Failed to move up the probe")
+            return False
         
-        # # go to the magnet position
-        # print("[probe_action] moving to magnet position")
-        # magnet_pose = rospy.get_param("~magnet_pose")
-        # magnet_kinova_pose = get_kinovapose_from_list(magnet_pose)
-        # magnet_kinova_pose.theta_z_deg += 180.0
-        # success = self.arm.send_cartesian_pose(magnet_kinova_pose)
+        # go to the magnet position
+        print("[probe_action] moving to magnet position")
+        magnet_pose = rospy.get_param("~magnet_pose")
+        magnet_kinova_pose = get_kinovapose_from_list(magnet_pose)
+        magnet_kinova_pose.theta_z_deg += 180.0
+        success = self.arm.send_cartesian_pose(magnet_kinova_pose)
 
-        # if not success:
-        #     rospy.logerr("Failed to move to the magnet position")
-        #     return False
+        if not success:
+            rospy.logerr("Failed to move to the magnet position")
+            return False
 
-        # # open the gripper
-        # success = self.arm.execute_gripper_command(0.0)
+        # open the gripper
+        success = self.arm.execute_gripper_command(0.0)
 
-        # if not success:
-        #     rospy.logerr("Failed to open the gripper")
-        #     return False
+        if not success:
+            rospy.logerr("Failed to open the gripper")
+            return False
         
-        # # move up a bit
-        # magnet_kinova_pose.z += 0.3
+        # move up a bit
+        magnet_kinova_pose.z += 0.3
 
-        # success = self.arm.send_cartesian_pose(magnet_kinova_pose)
+        success = self.arm.send_cartesian_pose(magnet_kinova_pose)
 
-        # if not success:
-        #     rospy.logerr("Failed to move up the probe")
-        #     return False
+        if not success:
+            rospy.logerr("Failed to move up the probe")
+            return False
 
-        # print("[probe_action] target reached")
-
-    def push_door(self):  # push door is not cuurently used
-            # move arm above door knob position 
-
-
-            msg = PoseStamped()
-            msg.header.frame_id = "door_knob_rotated"
-            msg.header.stamp = rospy.Time(0)
-
-            msg.pose.position.x -= 0.075
-            msg.pose.position.z += 0.30
-
-            door_knob_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True)
-
-            print("Door knob pose:  ")
-            print(door_knob_pose)
-            self.door_knob_pose_pub.publish(door_knob_pose)
-
-            rospy.sleep(5)
-
-            success = self.arm.execute_gripper_command(1.0)
-
-            if not success:
-                rospy.logerr("Failed to open the gripper")
-                return False
-            
-
-            # convert the door knob pose to a kinova pose
-            door_knob_kinova_pose = get_kinovapose_from_pose_stamped(door_knob_pose)
-
-
-
-            print("Door knob kinova pose:  ")
-            print(door_knob_kinova_pose)
-
-            success = self.arm.send_cartesian_pose(door_knob_kinova_pose)
-
-            if not success:
-                rospy.logerr("Failed to go to up doorknob position")
-                return False
-
-            print("[probe_action] door knob UP position reached")
-
-
-            distance = 0.22 # m  (0.045 is the length the slider can travel and 0.005 is a small offset for safety reasons)
-            time = 5 # s
-
-            velocity = distance/time
-
-
-            approach_vel_msg = kortex_driver.msg.TwistCommand()
-
-            approach_vel_msg.twist.linear_z = -velocity
-            self.cart_vel_pub.publish(approach_vel_msg)
-            rospy.sleep(time)
-            self.stop_arm()
-
-            success = self.arm.execute_gripper_command(1.0)
-
-            if not success:
-                rospy.logerr("Failed to open the gripper")
-                return False
-
-            distance = 0.085     # m  (0.045 is the length the slider can travel and 0.005 is a small offset for safety reasons)
-            time = 6 # s
-
-            velocity = distance/time
-
-            msg = self.create_velocity(velocity,door_knob_pose)
-            self.cart_vel_pub.publish(msg)
-            rospy.sleep(time)
-            self.stop_arm()
-
-            self.arm.clear_faults()
-            self.arm.subscribe_to_a_robot_notification()
-
-            print("[probe_action] door pushed and process finished")
-
-            return True
-        
-
-    def create_velocity(self,velocity, pose):
-        """
-        Create Twist message from velocity vector
-
-        input: velocity vector :: np.array
-        output: velocity vector :: Twist
-        """
-
-
-        # convert pose.orientation to yaw
-        orientation = pose.pose.orientation
-        quaternion = (orientation.x, orientation.y, orientation.z, orientation.w)
-        euler = tf.transformations.euler_from_quaternion(quaternion)
-        yaw = euler[2]
-
-        print("yaw: ", yaw)
-
-        msg = kortex_driver.msg.TwistCommand()
-
-        msg.twist.linear_x = velocity * math.cos(yaw)
-        msg.twist.linear_y = velocity * math.sin(yaw)
-        msg.twist.linear_z = 0.0
-        msg.duration = 20
-        return msg
+        print("[probe_action] target reached")    
     
-
-    def stop_arm(self):
-        """
-        Stop arm by sending zero velocity
-        """
-
-        velocity_vector = TwistCommand()
-        velocity_vector.twist.linear_x = 0.0
-        velocity_vector.twist.linear_y = 0.0
-        velocity_vector.twist.linear_z = 0.0
-        velocity_vector.twist.angular_x = 0.0
-        velocity_vector.twist.angular_y = 0.0
-        velocity_vector.twist.angular_z = 0.0
-        self.cart_vel_pub.publish(velocity_vector)
-
-        return True
-
-
-    
-    def pick_probe(self):
+    def pick_probe_from_holder(self):
         
         # go to the probe pre-pick position above the holder
         probe_holder_pick_pre_pose = rospy.get_param("~probe_holder_pick_pre_pose")
@@ -539,6 +442,11 @@ class ProbeAction(AbstractAction):
 
         return True
 
+    def probe_circuit(self):
+        pass
+
+    def place_probe_safe(self):
+        pass
 
     def get_probe_cable_dir(self, image):
         '''
