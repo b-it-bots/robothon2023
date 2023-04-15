@@ -41,13 +41,15 @@ class KinovaPose:
         theta_x_deg (float): The angle of rotation around the x-axis, in degrees.
         theta_y_deg (float): The angle of rotation around the y-axis, in degrees.
         theta_z_deg (float): The angle of rotation around the z-axis, in degrees.
+
+    Default Values are 0.0 for all attributes.
     """
-    x: float
-    y: float
-    z: float
-    theta_x_deg: float
-    theta_y_deg: float
-    theta_z_deg: float
+    x: float = 0.0
+    y: float = 0.0
+    z: float = 0.0
+    theta_x_deg: float = 0.0
+    theta_y_deg: float = 0.0
+    theta_z_deg: float = 0.0
 
     def __str__(self):
         return f"KinovaPose(x={self.x}, y={self.y}, z={self.z}, theta_x={self.theta_x_deg}, theta_y={self.theta_y_deg}, theta_z={self.theta_z_deg})"
