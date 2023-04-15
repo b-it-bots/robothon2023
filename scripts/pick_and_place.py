@@ -49,10 +49,6 @@ class PickAndPlace(object):
         self.current_force_z = []
 
         self.setup_arm_for_pick()
-        rospy.sleep(3.0)
-        rospy.loginfo("READY!")
-        rospy.sleep(3.0)
-        rospy.loginfo("READY!")
 
     def base_feedback_cb(self, msg):
         self.current_force_z.append(msg.base.tool_external_wrench_force_z)
@@ -81,14 +77,10 @@ class PickAndPlace(object):
         pre_height_above_button = rospy.get_param("~pre_height_above_button", 1.00)
         msg = PoseStamped()
         msg.header.frame_id = 'meter_plug_black_link'
-        msg.header.stamp = rospy.Time.now()
-        #make the z axis (blux in rviz) face below  by rotating around x axis
-        q = list(tf.transformations.quaternion_from_euler(math.pi, 0.0, math.pi/2))
-        msg.pose.orientation = Quaternion(*q)
+        msg.header.stamp = rospy.Time(0)
         msg.pose.position.z += pre_height_above_button
-        if self.tu.transformed_pose_with_retries(msg, 'base_link'):
-            msg = self.tu.transformed_pose_with_retries(msg, 'base_link')
-            # print(msg)
+        msg = self.tu.transformed_pose_with_retries(msg, 'base_link', execute_arm=True)
+        if msg:
             self.debug_pose_pub.publish(msg)
             kinovappose = get_kinovapose_from_pose_stamped(msg)
             self.fam.send_cartesian_pose(kinovappose)
@@ -243,7 +235,7 @@ class PickAndPlace(object):
 if __name__ == "__main__":
     rospy.init_node('pick_and_place')
     PAP = PickAndPlace()
-    # PAP.test_go_to_plug()
+    PAP.test_go_to_plug()
     # PAP.test_go_to_board()
     # PAP.test_press_button()
     rospy.spin()
