@@ -13,6 +13,7 @@ import rospy
 from geometry_msgs.msg import PoseStamped, Quaternion
 from typing import Union
 import rospy
+from utils.kinova_pose import KinovaPose, get_kinovapose_from_pose_stamped
 
 class TransformUtils(object):
 
@@ -26,7 +27,7 @@ class TransformUtils(object):
 
         self.transform_tries = 5
 
-    def transform_pose_frame_name_with_inversion(self,
+    def transform_pose_frame_name(self,
                                   reference_frame_name: str,
                                   target_frame_name: str,
                                   retries: int=5,
@@ -38,12 +39,12 @@ class TransformUtils(object):
         ## Getting Pose of the board_link in the base_link 
         msg = PoseStamped()
         msg.header.frame_id = reference_frame_name #board link is the name of tf
-        msg.header.stamp = rospy.Time.now()
+        #msg.header.stamp = rospy.Time.now()
+        msg.header.stamp = rospy.Time(0)
         #make the z axis (blux in rviz) face below  by rotating around x axis
-        euler_for_rotation = [math.pi+offset_rotation_euler[0], 
-                              0.0+offset_rotation_euler[0], 
-                              math.pi/2+offset_rotation_euler[0]] 
-        q = list(tf.transformations.quaternion_from_euler(euler_for_rotation))
+        q = list(tf.transformations.quaternion_from_euler(offset_rotation_euler[0],
+                                                          offset_rotation_euler[1],
+                                                          offset_rotation_euler[2]))
         msg.pose.orientation = Quaternion(*q)
         msg.pose.position.x += offset_linear[0]
         msg.pose.position.y += offset_linear[1]

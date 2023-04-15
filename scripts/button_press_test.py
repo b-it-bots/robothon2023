@@ -10,6 +10,7 @@ from robothon2023.full_arm_movement import FullArmMovement
 from robothon2023.slider_action import SliderAction
 from robothon2023.button_press_action import ButtonPressAction
 from robothon2023.transform_utils import TransformUtils
+from utils.kinova_pose import get_kinovapose_from_list 
 import numpy as np
 import actionlib
 
@@ -19,9 +20,9 @@ class RobothonTask(object):
 
     def __init__(self):
         self.joint_angles = rospy.get_param("~joint_angles", None)
-        self.fam = FullArmMovement()
+        self.arm = FullArmMovement()
         self.tu = TransformUtils()
-        self.button_press_action = ButtonPressAction(self.fam, self.tu)
+        self.button_press_action = ButtonPressAction(self.arm, self.tu)
 
         self.loop_rate = rospy.Rate(10.0)
 
@@ -35,14 +36,17 @@ class RobothonTask(object):
         :returns: None
 
         """
-        self.fam.clear_faults()
-        self.fam.subscribe_to_a_robot_notification()
-        # self.fam.test_send_joint_angles(self.joint_angles["vertical_pose"])
-        print (self.joint_angles['perceive_table'])
-        self.fam.send_joint_angles(self.joint_angles["perceive_table"])
-        self.fam.execute_gripper_command(0.0) #Open the gripper 
-        #self.fam.example_send_gripper_command(0.5) #half close the gripper 
-        self.fam.execute_gripper_command(0.9) #full close the gripper 
+        self.arm.clear_faults()
+        self.arm.subscribe_to_a_robot_notification()
+        # self.arm.test_send_joint_angles(self.joint_angles["vertical_pose"])
+        #self.arm.send_joint_angles(self.joint_angles["perceive_table"])
+        perceive_board_pose = rospy.get_param("~perceive_board_pose")
+        perceive_board_pose = get_kinovapose_from_list(perceive_board_pose)
+        self.arm.send_cartesian_pose(perceive_board_pose) 
+        rospy.sleep(0.1)
+        self.arm.execute_gripper_command(0.0) #Open the gripper 
+        #self.arm.example_send_gripper_command(0.5) #half close the gripper 
+        self.arm.execute_gripper_command(0.9) #full close the gripper 
         rospy.sleep(0.1)
 
 

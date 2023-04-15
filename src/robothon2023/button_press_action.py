@@ -37,10 +37,11 @@ class ButtonPressAction(AbstractAction):
     def pre_perceive(self) -> bool:
         print ("in pre perceive")
 
-        pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.1)
-        kinova_pose = self.transform_utils.transform_pose_frame_name_with_inversion(reference_frame_name="board_link",
+        pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.05)
+        kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name="board_link",
                                                                       target_frame_name="base_link",
-                                                                      offset_linear=[0., 0., pre_height_above_button])
+                                                                      offset_linear=[0.01, 0.01, pre_height_above_button],
+                                                                      offset_rotation_euler=[math.pi, 0.0, math.pi/2])
 
         self.arm.send_cartesian_pose(kinova_pose)
         return True
@@ -83,16 +84,9 @@ class ButtonPressAction(AbstractAction):
 
     def verify(self) -> bool:
         print ("in verify")
+        kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name="gui_verify",
+                                                                      target_frame_name="base_link",
+                                                                      offset_rotation_euler=[math.pi, 0.0, math.pi/2])
 
-        ## Getting Pose of the gui verify link
-        msg = PoseStamped()
-        msg.header.frame_id = 'gui_verify' #board link is the name of tf
-        msg.header.stamp = rospy.Time.now()
-        #make the z axis (blux in rviz) face below  by rotating around x axis
-        q = list(tf.transformations.quaternion_from_euler(math.pi, 0.0, math.pi/2))
-        msg.pose.orientation = Quaternion(*q)
-        # Creating a zero pose of the baord link and trasnforming it with respect to base link
-        msg = self.transform_utils.transformed_pose_with_retries(msg, 'base_link')
-        kinova_pose = get_kinovapose_from_pose_stamped(msg)
         self.arm.send_cartesian_pose(kinova_pose)
         return True
