@@ -3,6 +3,7 @@
 import rospy
 from robothon2023.abstract_action import AbstractAction
 from geometry_msgs.msg import PoseStamped, Quaternion
+import geometry_msgs.msg
 from sensor_msgs.msg import Image
 from robothon2023.full_arm_movement import FullArmMovement
 from robothon2023.transform_utils import TransformUtils
@@ -32,9 +33,9 @@ class ProbeAction(AbstractAction):
         return True
 
     def act(self) -> bool:
-        success = self.place_probe_in_holder()
-
-        # success = self.pick_magnet()
+        # success = self.place_probe_in_holder()
+       
+        success = self.pick_magnet()
         
         return success
 
@@ -165,39 +166,67 @@ class ProbeAction(AbstractAction):
         
         return True
     
+    def create_twist_from_velocity(self, velocity) -> Twist:
+        """
+        Create Twist message from velocity vector
+
+        input: velocity vector :: np.array
+        output: velocity vector :: Twist
+        """
+        board_wrt_base = self.transform_utils.get_pose_from_link('base_link', 'board_link')
+
+        # convert pose.orientation to yaw
+        orientation = board_wrt_base.pose.orientation
+        quaternion = (orientation.x, orientation.y, orientation.z, orientation.w)
+        euler = tf.transformations.euler_from_quaternion(quaternion)
+        yaw = euler[2]
+
+        print("yaw: ", yaw)
+
+        velocity_vector = geometry_msgs.msg.Twist()
+        velocity_vector.linear.x = velocity * math.cos(yaw)
+        velocity_vector.linear.y = velocity * math.sin(yaw)
+        velocity_vector.linear.z = 0
+
+        velocity_vector.angular.x = 0
+        velocity_vector.angular.y = 0
+        velocity_vector.angular.z = 0
+               
+        return velocity_vector
+
     def pick_magnet(self):
-        # get magnet pose from param server
-        magnet_pose = rospy.get_param("~magnet_pose")
-        magnet_kinova_pose = get_kinovapose_from_list(magnet_pose)
+        # # get magnet pose from param server
+        # magnet_pose = rospy.get_param("~magnet_pose")
+        # magnet_kinova_pose = get_kinovapose_from_list(magnet_pose)
 
-        # rotate the yaw by 180 degrees
-        magnet_kinova_pose.theta_z_deg += 180.0
+        # # rotate the yaw by 180 degrees
+        # magnet_kinova_pose.theta_z_deg += 180.0
 
-        # send magnet pose to the arm
-        print("[probe_action] moving to magnet position")
-        success = self.arm.send_cartesian_pose(magnet_kinova_pose)
+        # # send magnet pose to the arm
+        # print("[probe_action] moving to magnet position")
+        # success = self.arm.send_cartesian_pose(magnet_kinova_pose)
 
-        if not success:
-            rospy.logerr("Failed to move to the magnet position")
-            return False
+        # if not success:
+        #     rospy.logerr("Failed to move to the magnet position")
+        #     return False
         
-        print("[probe_action] reached magnet position")
+        # print("[probe_action] reached magnet position")
 
-        # close the gripper
-        success = self.arm.execute_gripper_command(0.7)
+        # # close the gripper
+        # success = self.arm.execute_gripper_command(0.7)
 
-        if not success:
-            rospy.logerr("Failed to close the gripper")
-            return False
+        # if not success:
+        #     rospy.logerr("Failed to close the gripper")
+        #     return False
         
-        # move up a bit
-        magnet_kinova_pose.z += 0.3
+        # # move up a bit
+        # magnet_kinova_pose.z += 0.3
 
-        success = self.arm.send_cartesian_pose(magnet_kinova_pose)
+        # success = self.arm.send_cartesian_pose(magnet_kinova_pose)
 
-        if not success:
-            rospy.logerr("Failed to move up the probe")
-            return False
+        # if not success:
+        #     rospy.logerr("Failed to move up the probe")
+        #     return False
         
         # go to the door knob position
         # get the door knob position from tf
@@ -205,7 +234,7 @@ class ProbeAction(AbstractAction):
         msg.header.frame_id = "door_knob_link"
         msg.header.stamp = rospy.Time(0)
         msg.pose.position.x -= 0.015
-        msg.pose.orientation.z += 180
+        # msg.pose.orientation.z += 180
 
         door_knob_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True)
 
@@ -231,25 +260,28 @@ class ProbeAction(AbstractAction):
         vel = 0.05
 
         angle = 45.0
-
+        # w.r.t board link
+        linear_vel_x = vel*math.cos(math.radians(angle))
         linear_vel_z = vel*math.sin(math.radians(angle))
-        linear_vel_y = vel*math.cos(math.radians(angle))
-        angular_vel_y = 0.1
 
-        print("[probe_action] moving up with linear_z velocity: {}".format(linear_vel_z))
-        print("[probe_action] moving up with linear_y velocity: {}".format(-linear_vel_y))
+        twist_base = self.create_twist_from_velocity(linear_vel_x)
+        twist_base.linear.z = linear_vel_z
+        angular_vel_y = -0.1
+
         msg = kortex_driver.msg.TwistCommand()
 
 
         for i in range(4):
 
-            msg.twist.linear_z = linear_vel_z 
-            msg.twist.linear_y = -linear_vel_y 
+            msg.twist.linear_z = twist_base.linear.z
+            msg.twist.linear_y = twist_base.linear.y 
+            msg.twist.linear_x = twist_base.linear.x
             msg.twist.angular_y = angular_vel_y
             self.cart_vel_pub.publish(msg)
 
-            linear_vel_z *= 0.18
-            angular_vel_y += 0.15
+            twist_base.linear.z *= 0.18
+            angular_vel_y -= 0.15
+
 
             rospy.sleep(1)
 
@@ -263,46 +295,46 @@ class ProbeAction(AbstractAction):
         self.arm.clear_faults()
         self.arm.subscribe_to_a_robot_notification()
     
-        # get current pose of the arm
-        current_pose = self.arm.get_current_pose()
+        # # get current pose of the arm
+        # current_pose = self.arm.get_current_pose()
 
-        # go up by 5cm
-        current_pose.z += 0.1
+        # # go up by 5cm
+        # current_pose.z += 0.1
 
-        success = self.arm.send_cartesian_pose(current_pose)
+        # success = self.arm.send_cartesian_pose(current_pose)
 
-        if not success:
-            rospy.logerr("Failed to move up the probe")
-            return False
+        # if not success:
+        #     rospy.logerr("Failed to move up the probe")
+        #     return False
         
-        # go to the magnet position
-        print("[probe_action] moving to magnet position")
-        magnet_pose = rospy.get_param("~magnet_pose")
-        magnet_kinova_pose = get_kinovapose_from_list(magnet_pose)
-        magnet_kinova_pose.theta_z_deg += 180.0
-        success = self.arm.send_cartesian_pose(magnet_kinova_pose)
+        # # go to the magnet position
+        # print("[probe_action] moving to magnet position")
+        # magnet_pose = rospy.get_param("~magnet_pose")
+        # magnet_kinova_pose = get_kinovapose_from_list(magnet_pose)
+        # magnet_kinova_pose.theta_z_deg += 180.0
+        # success = self.arm.send_cartesian_pose(magnet_kinova_pose)
 
-        if not success:
-            rospy.logerr("Failed to move to the magnet position")
-            return False
+        # if not success:
+        #     rospy.logerr("Failed to move to the magnet position")
+        #     return False
 
-        # open the gripper
-        success = self.arm.execute_gripper_command(0.0)
+        # # open the gripper
+        # success = self.arm.execute_gripper_command(0.0)
 
-        if not success:
-            rospy.logerr("Failed to open the gripper")
-            return False
+        # if not success:
+        #     rospy.logerr("Failed to open the gripper")
+        #     return False
         
-        # move up a bit
-        magnet_kinova_pose.z += 0.3
+        # # move up a bit
+        # magnet_kinova_pose.z += 0.3
 
-        success = self.arm.send_cartesian_pose(magnet_kinova_pose)
+        # success = self.arm.send_cartesian_pose(magnet_kinova_pose)
 
-        if not success:
-            rospy.logerr("Failed to move up the probe")
-            return False
+        # if not success:
+        #     rospy.logerr("Failed to move up the probe")
+        #     return False
 
-        print("[probe_action] target reached")
+        # print("[probe_action] target reached")
 
     def push_door(self):  # push door is not cuurently used
             # move arm above door knob position 
@@ -508,7 +540,7 @@ class ProbeAction(AbstractAction):
         return True
 
 
-    def get_probe_cable_dir(self, image: cv2.Mat):
+    def get_probe_cable_dir(self, image):
         '''
         This function takes an image of the probe cable and returns the direction of the cable
         return: angle in degrees (in cv coordinate system)

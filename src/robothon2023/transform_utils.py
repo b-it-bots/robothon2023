@@ -127,35 +127,35 @@ class TransformUtils(object):
             rospy.logwarn("Exception occurred: {0}".format(error))
             return None
         
-    # def get_pose_from_link(self, target_link: str, source_link: str):
-    #     '''
-    #     input: target_link: the link to get the pose of
-    #             source_link: the link to get the pose in
-    #     output: PoseStamped\n
-    #     returns the pose of the link in the source link frame
-    #     '''
+    def get_pose_from_link(self, target_link: str, source_link: str):
+        '''
+        input: target_link: the link to get the pose in
+                source_link: the link to get the pose of
+        output: PoseStamped\n
+        returns the pose of the link in the target link frame
+        '''
 
-    #     listener = tf.TransformListener()
+        listener = tf.TransformListener()
 
-    #     # Wait for the transform to become available
-    #     listener.waitForTransform(source_link, target_link, rospy.Time(), rospy.Duration(1.0))
+        # Wait for the transform to become available
+        listener.waitForTransform(source_link, target_link, rospy.Time(), rospy.Duration(1.0))
 
-    #     # Get the pose of the base_link with respect to the map
-    #     (trans, rot) = listener.lookupTransform(target_link, source_link, rospy.Time(0))
+        # Get the pose of the base_link with respect to the map
+        (trans, rot) = listener.lookupTransform(target_link, source_link, rospy.Time(0))
 
-    #     # Convert the translation and rotation to a PoseStamped message
-    #     pose_msg = PoseStamped()
-    #     pose_msg.header.stamp = rospy.Time.now()
-    #     pose_msg.header.frame_id = source_link
-    #     pose_msg.pose.position.x = trans[0]
-    #     pose_msg.pose.position.y = trans[1]
-    #     pose_msg.pose.position.z = trans[2]
-    #     pose_msg.pose.orientation.x = rot[0]
-    #     pose_msg.pose.orientation.y = rot[1]
-    #     pose_msg.pose.orientation.z = rot[2]
-    #     pose_msg.pose.orientation.w = rot[3]
+        # Convert the translation and rotation to a PoseStamped message
+        pose_msg = PoseStamped()
+        pose_msg.header.stamp = rospy.Time.now()
+        pose_msg.header.frame_id = source_link
+        pose_msg.pose.position.x = trans[0]
+        pose_msg.pose.position.y = trans[1]
+        pose_msg.pose.position.z = trans[2]
+        pose_msg.pose.orientation.x = rot[0]
+        pose_msg.pose.orientation.y = rot[1]
+        pose_msg.pose.orientation.z = rot[2]
+        pose_msg.pose.orientation.w = rot[3]
 
-    #     return pose_msg
+        return pose_msg
     
     def get_transformed_pose(self, reference_pose, target_frame):
         """ Transform pose with multiple retries
