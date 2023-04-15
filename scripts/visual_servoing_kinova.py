@@ -26,13 +26,12 @@ import numpy as np
 import kortex_driver.msg
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
-from pathlib import Path
 import cv2
-import pdb
-from std_msgs.msg import String
+from robothon2023.full_arm_movement import FullArmMovement
 
 class WrenchTest(object):
     def __init__(self):
+        self.arm = FullArmMovement()
         self.sub = rospy.Subscriber('/my_gen3/base_feedback', kortex_driver.msg.BaseCyclic_Feedback, self.base_feedback_cb)
         self.pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
         self.img_sub = rospy.Subscriber('/camera/color/image_raw', Image, self.image_cb)
@@ -45,6 +44,9 @@ class WrenchTest(object):
         self.stop = False
         self.velocity = 0.005
         self.image_queue = []
+        self.move_up_done = False
+        self.move_down_done = False
+        self.close_gripper_done = False
 
     def base_feedback_cb(self, msg):
         self.current_force_z.append(msg.base.tool_external_wrench_force_z)
@@ -205,7 +207,7 @@ class WrenchTest(object):
                         continue
                 else:
                     self.move(0)
-                    continue
+                    return True
 
                 # draw the error line on the image from the centroid to the vertical line
                 error_line = [centroid, (centroid_x + self.error, centroid_y)]
@@ -215,11 +217,48 @@ class WrenchTest(object):
                 self.img_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
                 # rospy.loginfo("Published a final image!")
 
+    def move_down(self):
+        rospy.loginfo("Moving down")
+        pre_height_above_button = rospy.get_param("~pre_height_above_button", 1.00)
+        msg = kortex_driver.msg.TwistCommand()
+        msg.twist.linear_z = pre_height_above_button - 0.02
+        self.pub.publish(msg)
+        self.loop_rate.sleep()
+        self.move_up_done = True
+        return True
+
+    def close_gripper(self):
+        rospy.loginfo("Closing gripper")
+        # self.arm.execute_gripper_command(0.0) #Open the gripper 
+        #self.arm.example_send_gripper_command(0.5) #half close the gripper 
+        self.arm.execute_gripper_command(0.5) #full close the gripper 
+        rospy.sleep(0.1)
+        return True
+
+    def move_up(self):
+        rospy.loginfo("Moving up")
+        pre_height_above_button = rospy.get_param("~pre_height_above_button", 1.00)
+        msg = kortex_driver.msg.TwistCommand()
+        msg.twist.linear_z = -pre_height_above_button
+        self.pub.publish(msg)
+        self.loop_rate.sleep()
+        return True
 
 def main():
     rospy.init_node('visual_servoing_kinova')
     wt = WrenchTest()
-    wt.run_visual_servoing()
+    servoing_flag = wt.run_visual_servoing()
+    if servoing_flag:
+        if wt.move_down():
+            rospy.sleep(2.0)
+            if wt.close_gripper():
+                rospy.sleep(1.0)
+                if wt.move_up():
+                    rospy.sleep(1.0)
+                    print("Visual Servoing is done!")
+                    # shutdown the node
+                    rospy.signal_shutdown("Visual Servoing is done!")
+
     try:
       rospy.spin()
     except KeyboardInterrupt:
