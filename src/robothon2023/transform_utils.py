@@ -26,7 +26,34 @@ class TransformUtils(object):
 
         self.transform_tries = 5
 
-    
+    def transform_pose_frame_name_with_inversion(self,
+                                  reference_frame_name: str,
+                                  target_frame_name: str,
+                                  retries: int=5,
+                                  offset_linear: List[float]=[0., 0., 0.],
+                                  offset_rotation_euler: List[float]=[0., 0., 0.]
+                                ) -> Union[KinovaPose, None]:
+        """ Transform pose with string names and any offset if provided
+        """
+        ## Getting Pose of the board_link in the base_link 
+        msg = PoseStamped()
+        msg.header.frame_id = reference_frame_name #board link is the name of tf
+        msg.header.stamp = rospy.Time.now()
+        #make the z axis (blux in rviz) face below  by rotating around x axis
+        euler_for_rotation = [math.pi+offset_rotation_euler[0], 
+                              0.0+offset_rotation_euler[0], 
+                              math.pi/2+offset_rotation_euler[0]] 
+        q = list(tf.transformations.quaternion_from_euler(euler_for_rotation))
+        msg.pose.orientation = Quaternion(*q)
+        msg.pose.position.x += offset_linear[0]
+        msg.pose.position.y += offset_linear[1]
+        msg.pose.position.z += offset_linear[2]
+        # either because of a camera calibration offset or something to do with the reference frame for sending Cartesian poses
+#        msg.pose.position.x += 0.01
+        # Creating a zero pose of the baord link and trasnforming it with respect to base link
+        msg = self.transformed_pose_with_retries(msg, target_frame_name)
+        kinova_pose = get_kinovapose_from_pose_stamped(msg)
+        return kinova_pose
 
     def transformed_pose_with_retries(self, reference_pose: PoseStamped, 
                                       target_frame: str,

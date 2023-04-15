@@ -38,21 +38,10 @@ class ButtonPressAction(AbstractAction):
         print ("in pre perceive")
 
         pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.1)
-        ## Getting Pose of the board_link in the base_link 
-        msg = PoseStamped()
-        msg.header.frame_id = 'board_link' #board link is the name of tf
-        msg.header.stamp = rospy.Time.now()
-        #make the z axis (blux in rviz) face below  by rotating around x axis
-        q = list(tf.transformations.quaternion_from_euler(math.pi, 0.0, math.pi/2))
-        msg.pose.orientation = Quaternion(*q)
-        msg.pose.position.z += pre_height_above_button
-        # either because of a camera calibration offset or something to do with the reference frame for sending Cartesian poses
-#        msg.pose.position.x += 0.01
-        # Creating a zero pose of the baord link and trasnforming it with respect to base link
-        msg = self.transform_utils.transformed_pose_with_retries(msg, 'base_link')
-        #debug_pose = copy.deepcopy(msg)
-        #self.debug_pose_pub.publish(debug_pose)
-        kinova_pose = get_kinovapose_from_pose_stamped(msg)
+        kinova_pose = self.transform_utils.transform_pose_frame_name_with_inversion(reference_frame_name="board_link",
+                                                                      target_frame_name="base_link",
+                                                                      offset_linear=[0., 0., pre_height_above_button])
+
         self.arm.send_cartesian_pose(kinova_pose)
         return True
 
