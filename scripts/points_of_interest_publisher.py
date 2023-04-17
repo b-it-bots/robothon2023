@@ -12,6 +12,7 @@ import geometry_msgs.msg
 import rospy
 import tf
 import numpy as np
+from robothon2023.transform_utils import TransformUtils
 
 
 class PointsOfInterestPublisher(object):
@@ -41,6 +42,7 @@ class PointsOfInterestPublisher(object):
 
         self.loop_rate = rospy.Rate(10.0)
         self.tf_broadcaster = tf.TransformBroadcaster()
+        self.transform_utils = TransformUtils()
 
     def board_pose_cb(self, msg):
         self.board_poses_queue.append(msg)
@@ -93,6 +95,7 @@ class PointsOfInterestPublisher(object):
                 pose.pose.orientation.w = quat[3]
                 pose.header.stamp = rospy.Time.now()
                 pose.header.frame_id = 'board_link'
+                pose = self.transform_utils.transformed_pose_with_retries(pose, "base_link")
                 publisher.publish(pose)
 
     def get_median_board_pose(self):

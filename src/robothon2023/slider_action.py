@@ -194,7 +194,7 @@ class SliderAction(AbstractAction):
         q = list(tf.transformations.quaternion_from_euler(e[0], e[1], e[2]))
 
         msg.pose.orientation = Quaternion(*q)
-        msg.pose.position.z += 0.01 # add 15 cm to the z axis and then approach the slider
+        msg.pose.position.z += 0.06 # add 15 cm to the z axis and then approach the slider
         msg = self.transform_utils.transformed_pose_with_retries(msg, 'base_link')
         return msg
 
