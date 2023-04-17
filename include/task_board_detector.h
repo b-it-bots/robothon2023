@@ -20,18 +20,7 @@
 
 
 #include <pcl/common/common.h>
-#include <pcl/filters/passthrough.h>
-#include <pcl/filters/project_inliers.h>
-#include <pcl/filters/radius_outlier_removal.h>
-#include <pcl/filters/voxel_grid.h>
-#include <pcl/segmentation/sac_segmentation.h>
-#include <pcl/segmentation/extract_clusters.h>
-#include <pcl/segmentation/extract_polygonal_prism_data.h>
-#include <pcl/features/normal_3d.h>
-#include <pcl/kdtree/kdtree.h>
-#include <pcl/surface/convex_hull.h>
-#include <pcl/geometry/planar_polygon.h>
-#include <pcl/filters/extract_indices.h>
+#include <pcl/filters/filter.h>
 #include <string>
 
 #include <message_filters/subscriber.h>
@@ -55,44 +44,15 @@ private:
 
     ros::Publisher pointcloud_publisher;
     ros::Publisher plane_polygon_publisher;
-    ros::Publisher pose_publisher;
     ros::Publisher image_publisher;
-    ros::Publisher slider_pose_publisher;
-    ros::Publisher slider_start_pose_publisher;
-    ros::Publisher slider_end_pose_publisher;
-    ros::Publisher door_pose_publisher;
+    ros::Publisher board_pose_publisher;
     ros::Subscriber camera_info_sub;
     boost::shared_ptr<tf::TransformListener> tf_listener;
-    tf2_ros::TransformBroadcaster tf_broadcaster;
-    tf2_ros::StaticTransformBroadcaster static_tf_broadcaster;
     std::string target_frame;
     sensor_msgs::CameraInfoConstPtr camera_info;
     bool received_camera_info;
 
     geometry_msgs::TransformStamped circle_tf;
-
-    double passthrough_x_min;
-    double passthrough_x_max;
-    double passthrough_y_min;
-    double passthrough_y_max;
-    double cluster_tolerance;
-    double voxel_leaf_size;
-    int min_cluster_size;
-    int max_cluster_size;
-
-    pcl::PassThrough<PointT> passthrough_filter;
-    pcl::VoxelGrid<PointT> voxel_filter;
-    pcl::SACSegmentationFromNormals<PointT, PointNT> sac_segmentation;
-    pcl::ProjectInliers<PointT> project_inliers;
-    pcl::EuclideanClusterExtraction<PointT> cluster_extraction;
-    pcl::NormalEstimation<PointT, PointNT> normal_estimation;
-    pcl::ConvexHull<PointT> convex_hull;
-    pcl::ExtractPolygonalPrismData<PointT> extract_polygonal_prism;
-    pcl::ExtractIndices<PointT> extract;
-
-    PointCloud::Ptr getPlane(const PointCloud::Ptr &full_cloud,
-                             pcl::ModelCoefficients::Ptr &coefficients,
-                             pcl::PlanarPolygon<PointT>::Ptr &hull_polygon, PointCloud::Ptr &hull_pointcloud);
 
     message_filters::Subscriber<sensor_msgs::Image> *image_sub;
     message_filters::Subscriber<sensor_msgs::PointCloud2> *cloud_sub;
@@ -106,24 +66,9 @@ private:
      */
     bool findBoardOrigin(PointCloud::Ptr &full_cloud, cv::Mat &debug_image, const std::string &img_frame_id, const std::string &pc_frame_id);
     /**
-     * find top plane of the task board in 3D
-     */
-    bool findBoardPlane(PointCloud::Ptr &full_cloud, const std::string &frame_id);
-
-    /**
      * get 3D points of a circle defined in 2D
      */
     PointCloud::Ptr get3DPointsInCircle(const PointCloud::Ptr &full_cloud, const cv::Vec3f &circle);
-
-    /**
-     * find slider position
-     */
-    bool findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat &debug_image, const cv::Point &start_point, const cv::Point &end_point, const std::string &pc_frame_id);
-
-    /**
-     * find door knob 
-     */
-    bool findDoorKnob(PointCloud::Ptr &full_cloud, cv::Mat &debug_image, const cv::Point &start_point, const std::string &pc_frame_id);
 
     std::vector<cv::Point> getLargestContour(const cv::Mat &img);
     void erode(cv::Mat &img);

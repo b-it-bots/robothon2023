@@ -8,6 +8,11 @@
             <remap from="~input_image_topic" to="/camera/color/image_raw" />
             <remap from="~camera_info_topic" to="/camera/color/camera_info" />
         </node>
+        <node pkg="robothon2023" type="points_of_interest_publisher.py" name="points_of_interest_publisher" output="screen" respawn="true">
+            <rosparam file="$(find robothon2023)/config/fixed_transforms.yaml" command="load"/>
+            <remap from="~approximate_board_pose" to="/task_board_detector/approximate_board_pose" />
+            <remap from="~fixed_board_pose" to="/task_board_detector/fixed_board_pose" />
+        </node>
     </group>
 
     <group if="$(arg use_mockup)">
@@ -21,14 +26,6 @@
         <param name="reference_frame" type="str" value="base_link"/>
 
         <remap from="~mock_up_pose" to="/mcr_perception/object_selector/output/object_pose"/>
-  </node>
-        
+        </node>
     </group>
-    <node pkg="tf2_ros" type="static_transform_publisher" name="slider_start_pub" args="0.057 -0.035 0 0 0 0 1 board_link slider_start_link" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="slider_end_pub" args="0.045 0 0 0 0 0 1 slider_start_link slider_end_link" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="meter_plug_black_pub" args="0 -0.058 0 0 0 0 1 board_link meter_plug_black_link" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="meter_plug_red_pub" args="0.025 0 0 0 0 0 1 meter_plug_black_link meter_plug_red_link" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="door_knob_pub" args="0.005 -0.142 0 0 0 0 1 board_link door_knob_link" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="board_top_view_pub" args="0.005 -0.142 0.1 0 0 0 1 board_link board_top_view" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="gui_verfiy_pub" args="0.057 -0.035 0.1 0 0 0 1 board_link gui_verify" />
 </launch>

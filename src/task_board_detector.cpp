@@ -5,29 +5,10 @@
 TaskBoardDetector::TaskBoardDetector(ros::NodeHandle &nh) : nh(nh), received_camera_info(false)
 {
     nh.param<std::string>("target_frame", target_frame, "base_link");
-    nh.param<double>("passthrough_x_min", passthrough_x_min, 0.0);
-    nh.param<double>("passthrough_x_max", passthrough_x_max, 8.0);
-    nh.param<double>("passthrough_y_min", passthrough_y_min, -0.7);
-    nh.param<double>("passthrough_y_max", passthrough_y_max, 0.7);
-    nh.param<double>("voxel_leaf_size", voxel_leaf_size, 0.01);
-    nh.param<double>("cluster_tolerance", cluster_tolerance, 0.02);
-    nh.param<int>("min_cluster_size", min_cluster_size, 1000);
-    nh.param<int>("max_cluster_size", max_cluster_size, 50000);
     tf_listener.reset(new tf::TransformListener);
 
-    cluster_extraction.setSearchMethod(boost::make_shared<pcl::search::KdTree<PointT> >());
-
-    normal_estimation.setSearchMethod(boost::make_shared<pcl::search::KdTree<PointT> >());
-    normal_estimation.setRadiusSearch(0.10);
-
-    pointcloud_publisher = nh.advertise<sensor_msgs::PointCloud2>("debug_pointcloud", 1);
     image_publisher = nh.advertise<sensor_msgs::Image>("debug_image", 1);
-    plane_polygon_publisher = nh.advertise<geometry_msgs::PolygonStamped>("output_plane_polygon", 1);
-    pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("object_pose", 1);
-    slider_pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("slider_pose", 1);
-    slider_start_pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("slider_start_pose", 1);
-    slider_end_pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("slider_end_pose", 1);
-    door_pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("door_pose", 1);
+    board_pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("approximate_board_pose", 1);
     camera_info_sub = nh.subscribe<sensor_msgs::CameraInfo>("camera_info_topic", 1, &TaskBoardDetector::cameraInfoCallback, this);
 
     image_sub = new message_filters::Subscriber<sensor_msgs::Image> (nh, "input_image_topic", 1);
@@ -88,18 +69,6 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
 
     cv::Mat img = cv_ptr->image.clone();
 
-    /*
-    bool plane_success = findBoardPlane(full_cloud, cloud_in_transformed.header.frame_id);
-    if (!plane_success)
-    {
-        ROS_WARN_STREAM("Could not find board plane");
-    }
-    else
-    {
-        ROS_DEBUG_STREAM("Found task board!");
-    }
-    */
-
     bool origin_success = findBoardOrigin(full_cloud, img, image->header.frame_id, cloud_in_transformed.header.frame_id);
     if (!origin_success)
     {
@@ -109,201 +78,8 @@ void TaskBoardDetector::synchronizeCallback(const sensor_msgs::ImageConstPtr &im
     img_msg->header.stamp = ros::Time::now();
     img_msg->header.frame_id = image->header.frame_id;
     image_publisher.publish(img_msg);
-    if (origin_success and tf_listener->frameExists("board_link"))
-    {
-        ros::Time common_time;
-        try
-        {
-            tf_listener->getLatestCommonTime(cloud_in->header.frame_id, "board_link", common_time, NULL);
-            tf_listener->waitForTransform(cloud_in->header.frame_id, "board_link", ros::Time::now(),
-                                          ros::Duration(1.0));
-        }
-        catch (tf::TransformException &ex)
-        {
-            ROS_ERROR("transform error: %s", ex.what());
-            return;
-        }
-        geometry_msgs::PointStamped slider_pos;
-        slider_pos.header.stamp = common_time;
-        slider_pos.header.frame_id = "board_link";
-        // TODO: replace with parameters
-        slider_pos.point.x = 0.057;
-        slider_pos.point.y = -0.035;
-        slider_pos.point.z = 0.0;
-        try
-        {
-            tf_listener->transformPoint(cloud_in->header.frame_id, slider_pos, slider_pos);
-        }
-        catch (tf::TransformException &ex)
-        {
-            ROS_ERROR("PCL transform error: %s", ex.what());
-            return;
-        }
-        // transform from 3D to 2D using camera matrix
-        // (fx * X + cx * Z) / Z
-        double start_u = ((camera_info->K[0] * slider_pos.point.x) + (camera_info->K[2] * slider_pos.point.z)) / slider_pos.point.z;
-        // (fy * Y + cy * Z) / Z
-        double start_v = ((camera_info->K[4] * slider_pos.point.y) + (camera_info->K[5] * slider_pos.point.z)) / slider_pos.point.z;
-
-        slider_pos.header.stamp = common_time;
-        slider_pos.header.frame_id = "board_link";
-        slider_pos.point.x = 0.057 + 0.045;
-        slider_pos.point.y = -0.035;
-        slider_pos.point.z = 0.0;
-        tf_listener->transformPoint(cloud_in->header.frame_id, slider_pos, slider_pos);
-        double end_u = ((camera_info->K[0] * slider_pos.point.x) + (camera_info->K[2] * slider_pos.point.z)) / slider_pos.point.z;
-        double end_v = ((camera_info->K[4] * slider_pos.point.y) + (camera_info->K[5] * slider_pos.point.z)) / slider_pos.point.z;
-
-        bool slider_success = findSliderPosition(full_cloud, img, cv::Point(start_u, start_v), cv::Point(end_u, end_v), cloud_in_transformed.header.frame_id);
-
-        geometry_msgs::PointStamped door_knob;
-        door_knob.header.stamp = common_time;
-        door_knob.header.frame_id = "board_link";
-        door_knob.point.x = 0.005;
-        door_knob.point.y = -0.142;
-        door_knob.point.z = 0.0;
-        try
-        {
-            tf_listener->transformPoint(cloud_in->header.frame_id, door_knob, door_knob);
-        }
-        catch (tf::TransformException &ex)
-        {
-            ROS_ERROR("PCL transform error: %s", ex.what());
-            return;
-        }
-        double door_u = ((camera_info->K[0] * door_knob.point.x) + (camera_info->K[2] * door_knob.point.z)) / door_knob.point.z;
-        double door_v = ((camera_info->K[4] * door_knob.point.y) + (camera_info->K[5] * door_knob.point.z)) / door_knob.point.z;
-
-
-        bool door_success = findDoorKnob(full_cloud, img, cv::Point(door_u, door_v), cloud_in_transformed.header.frame_id);
-
-        sensor_msgs::ImagePtr img_msg = cv_bridge::CvImage(std_msgs::Header(), "bgr8", img).toImageMsg();
-        img_msg->header.stamp = ros::Time::now();
-        img_msg->header.frame_id = image->header.frame_id;
-        image_publisher.publish(img_msg);
-
-    }
 }
 
-/**
- * find top plane of the task board in 3D
- */
-bool TaskBoardDetector::findBoardPlane(PointCloud::Ptr &full_cloud, const std::string &frame_id)
-{
-    /**
-     * 1. find largest plane
-     * 2. extract points above plane
-     * 3. Euclidean cluster, and select largest cluster
-     * 4. find plane of largest cluster
-     */
-    pcl::ModelCoefficients::Ptr plane_coefficients(new pcl::ModelCoefficients);
-    pcl::PlanarPolygon<PointT>::Ptr hull_polygon(new pcl::PlanarPolygon<PointT>);
-    PointCloud::Ptr hull_pointcloud(new PointCloud);
-
-    ROS_DEBUG_STREAM("finding largest plane");
-    PointCloud::Ptr plane = getPlane(full_cloud, plane_coefficients, hull_polygon, hull_pointcloud);
-
-    if (hull_pointcloud->empty())
-    {
-        return false;
-    }
-
-    ROS_DEBUG_STREAM("extract polygon prism above largest plane");
-    pcl::PointIndices::Ptr object_indices(new pcl::PointIndices);
-
-    extract_polygonal_prism.setHeightLimits(0.05, 0.5); // height above plane
-    extract_polygonal_prism.setInputPlanarHull(hull_pointcloud);
-    extract_polygonal_prism.setInputCloud(full_cloud);
-    extract_polygonal_prism.segment(*object_indices);
-
-    PointCloud::Ptr objects_above_plane(new PointCloud);
-    extract.setInputCloud(full_cloud);
-    extract.setIndices(object_indices);
-    extract.filter(*objects_above_plane);
-
-    if (objects_above_plane->points.empty())
-    {
-        return false;
-    }
-
-
-    voxel_filter.setInputCloud(objects_above_plane);
-    voxel_filter.setLeafSize(voxel_leaf_size, voxel_leaf_size, voxel_leaf_size);
-    voxel_filter.filter(*objects_above_plane);
-
-
-    ROS_DEBUG_STREAM("find clusters");
-    std::vector<pcl::PointIndices> clusters_indices;
-    std::vector<PointCloud::Ptr> clusters;
-    cluster_extraction.setInputCloud(objects_above_plane);
-    cluster_extraction.setClusterTolerance(cluster_tolerance);
-    cluster_extraction.setMinClusterSize(min_cluster_size);
-    cluster_extraction.setMaxClusterSize(max_cluster_size);
-    cluster_extraction.extract(clusters_indices);
-
-
-    ROS_DEBUG_STREAM("Num clusters " << clusters_indices.size());
-    if (clusters_indices.empty())
-    {
-        return false;
-    }
-
-
-    int largest_cluster_id = 0;
-    int num_points = 0;
-    for (size_t i = 0; i < clusters_indices.size(); i++)
-    {
-        const pcl::PointIndices& cluster_indices = clusters_indices[i];
-        PointCloud::Ptr cluster(new PointCloud);
-        pcl::copyPointCloud(*objects_above_plane, cluster_indices, *cluster);
-        clusters.push_back(cluster);
-
-        if (cluster->points.size() > num_points)
-        {
-            num_points = cluster->points.size();
-            largest_cluster_id = i;
-        }
-    }
-
-    if (!clusters.empty())
-    {
-        PointCloud::Ptr cluster_plane = getPlane(clusters[largest_cluster_id], plane_coefficients, hull_polygon, hull_pointcloud);
-        geometry_msgs::PolygonStamped poly;
-        poly.header.stamp = ros::Time::now();
-        poly.header.frame_id = frame_id;
-
-        for (int i = 0; i < hull_pointcloud->size(); i++)
-        {
-            geometry_msgs::Point32 pt;
-            pt.x = hull_pointcloud->points[i].x;
-            pt.y = hull_pointcloud->points[i].y;
-            pt.z = hull_pointcloud->points[i].z;
-            poly.polygon.points.push_back(pt);
-        }
-        if (poly.polygon.points.size() > 0)
-        {
-            plane_polygon_publisher.publish(poly);
-        }
-
-        Eigen::Vector4f centroid;
-        pcl::compute3DCentroid(*(clusters[largest_cluster_id]), centroid);
-
-        geometry_msgs::PoseStamped pose;
-        pose.header.frame_id = frame_id;
-        pose.header.stamp = ros::Time::now();
-        pose.pose.position.x = centroid[0];
-        pose.pose.position.y = centroid[1];
-        pose.pose.position.z = centroid[2];
-        pose.pose.orientation.w = 1.0;
-        pose_publisher.publish(pose);
-    }
-    sensor_msgs::PointCloud2 output;
-    pcl::toROSMsg(*(clusters[largest_cluster_id]), output);
-    output.header.frame_id = frame_id;
-    output.header.stamp = ros::Time::now();
-    pointcloud_publisher.publish(output);
-    return true;
-}
 
 /**
  * find blue and red buttons in 2D and 3D, and determine orientation of the board
@@ -336,6 +112,11 @@ bool TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, cv::Mat &de
     cv::bitwise_or(red_mask1, red_mask2, red_mask);
 
     std::vector<cv::Point> largest_contour = getLargestContour(red_mask);
+    if (largest_contour.empty())
+    {
+        ROS_ERROR_STREAM("Could not find blue and red buttons");
+        return false;
+    }
     std::vector<std::vector<cv::Point>> old_contours;
     old_contours.push_back(largest_contour);
     cv::drawContours(red_mask, old_contours, 0, cv::Scalar(0, 0, 0), cv::FILLED, 8);
@@ -398,8 +179,6 @@ bool TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, cv::Mat &de
         ROS_ERROR_STREAM("Could not find blue and red buttons");
         return false;
     }
-    ROS_INFO_STREAM("Radius " << red_circles[min_red_idx][2] << ", " << blue_circles[min_blue_idx][2]);
-    ROS_INFO_STREAM("Distance " << min_dist);
 
     cv::circle(debug_image, cv::Point(red_circles[min_red_idx][0], red_circles[min_red_idx][1]), red_circles[min_red_idx][2], cv::Scalar(0,255,0), 2, cv::LINE_AA);
     cv::circle(debug_image, cv::Point(blue_circles[min_blue_idx][0], blue_circles[min_blue_idx][1]), blue_circles[min_blue_idx][2], cv::Scalar(0,255,0), 2, cv::LINE_AA);
@@ -421,19 +200,20 @@ bool TaskBoardDetector::findBoardOrigin(PointCloud::Ptr &full_cloud, cv::Mat &de
     tf2::Quaternion q;
     q.setRPY(0, 0, box_yaw);
 
-    // NOTE: this is a member variable
-    circle_tf.header.stamp = ros::Time::now();
-    circle_tf.header.frame_id = pc_frame_id;
-    circle_tf.child_frame_id = "board_link";
-    circle_tf.transform.translation.x = blue_circle_center[0];
-    circle_tf.transform.translation.y = blue_circle_center[1];
-    circle_tf.transform.translation.z = blue_circle_center[2];
-    circle_tf.transform.rotation.x = q.x();
-    circle_tf.transform.rotation.y = q.y();
-    circle_tf.transform.rotation.z = q.z();
-    circle_tf.transform.rotation.w = q.w();
 
-    static_tf_broadcaster.sendTransform(circle_tf);
+    geometry_msgs::PoseStamped board_origin_pose;
+
+    board_origin_pose.header.stamp = ros::Time::now();
+    board_origin_pose.header.frame_id = pc_frame_id;
+    board_origin_pose.pose.position.x = blue_circle_center[0];
+    board_origin_pose.pose.position.y = blue_circle_center[1];
+    board_origin_pose.pose.position.z = blue_circle_center[2];
+    board_origin_pose.pose.orientation.x = q.x();
+    board_origin_pose.pose.orientation.y = q.y();
+    board_origin_pose.pose.orientation.z = q.z();
+    board_origin_pose.pose.orientation.w = q.w();
+
+    board_pose_publisher.publish(board_origin_pose);
 
     return true;
 
@@ -448,8 +228,8 @@ PointCloud::Ptr TaskBoardDetector::get3DPointsInCircle(const PointCloud::Ptr &fu
     int height = full_cloud->height;
     int grid_x_start = std::max(int(circle[0] - circle[2]), 0);
     int grid_y_start = std::max(int(circle[1] - circle[2]), 0);
-    int grid_x_end = std::min(int(circle[0] + circle[2]), width);
-    int grid_y_end = std::min(int(circle[1] + circle[2]), height);
+    int grid_x_end = std::min(int(circle[0] + circle[2]), width-1);
+    int grid_y_end = std::min(int(circle[1] + circle[2]), height-1);
     PointCloud::Ptr circle_cloud(new PointCloud);
     for (int i = grid_x_start; i <= grid_x_end; i++)
     {
@@ -469,244 +249,7 @@ PointCloud::Ptr TaskBoardDetector::get3DPointsInCircle(const PointCloud::Ptr &fu
     return circle_cloud;
 }
 
-bool TaskBoardDetector::findSliderPosition(PointCloud::Ptr &full_cloud, cv::Mat &debug_image, const cv::Point &start_point, const cv::Point &end_point, const std::string &pc_frame_id)
-{
-    /**
-     * 1. extract ROI from approximate start and end points
-     * 2. select largest contour after edge detection, and find the minAreaRectangle of it to get its orientation
-     * 3. rotate the ROI based on the orientation
-     * 4. crop the image again based on largest contour, so now the image should only consist of the slider
-     * 5. extract a slice from the center of the slider (i.e. through the black strip) and binary threshold it
-     * 6. match a template to find location of the slider knob (template is black-white-black region, which resembles the knob)
-     * 7. transform matched location back to the original image:
-     *     a) add offsets to get location in ROI from step 4
-     *     b) derotate using inverse rotation matrix to get location ROI from step 1
-     *     c) add offsets to get location in original image
-     * 8. find 3D positions of slider knob, and start and end location of slider slot and publish as poses (w.r.t. base_link)
-     */
-    // step 1
-    double margin = 20.0;
-    double min_x = std::min(start_point.x - margin, end_point.x - margin);
-    double max_x = std::max(start_point.x + margin, end_point.x + margin);
-    double min_y = std::min(start_point.y - margin, end_point.y - margin);
-    double max_y = std::max(start_point.y + margin, end_point.y + margin);
 
-    if (min_x < 0 or min_y < 0 or max_x > debug_image.cols or max_y > debug_image.rows)
-    {
-        ROS_ERROR("Slider ROI is larger than input image");
-        return false;
-    }
-
-    cv::Mat slider_roi(debug_image, cv::Rect(cv::Point(min_x, min_y), cv::Point(max_x, max_y)));
-
-    // step 2
-    cv::cvtColor(slider_roi, slider_roi, cv::COLOR_BGR2GRAY);
-    cv::GaussianBlur(slider_roi, slider_roi, cv::Size(3, 3), 0, 0);
-    cv::Mat slider_edges;
-    cv::Canny(slider_roi, slider_edges, 100, 200, 3);
-    dilate(slider_edges);
-    erode(slider_edges);
-    std::vector<cv::Point> largest_contour = getLargestContour(slider_edges);
-    if (largest_contour.empty())
-    {
-        ROS_ERROR("no slider found");
-        return false;
-    }
-    cv::RotatedRect min_area_rect = cv::minAreaRect(largest_contour);
-    cv::Point2f rotation_center((slider_roi.cols/2.), (slider_roi.rows/2.));
-    min_area_rect.angle += 90.0;
-    ROS_INFO_STREAM("Angle: " << min_area_rect.angle);
-    cv::Mat rotation_matrix = cv::getRotationMatrix2D(rotation_center, min_area_rect.angle, 1.0);
-    cv::Mat inv_rotation_matrix = cv::getRotationMatrix2D(rotation_center, -(min_area_rect.angle), 1.0);
-
-    // step 3
-    cv::transform(largest_contour, largest_contour, rotation_matrix);
-    cv::Mat slider_roi_rot;
-    cv::warpAffine(slider_roi, slider_roi_rot, rotation_matrix, cv::Size(slider_roi.cols, slider_roi.rows));
-
-    // step 4
-    cv::Rect bounding_rect = cv::boundingRect(largest_contour);
-    if (bounding_rect.x < 0 or bounding_rect.y < 0 or (bounding_rect.x + bounding_rect.width) > slider_roi_rot.cols or (bounding_rect.y + bounding_rect.height) > slider_roi_rot.rows)
-    {
-        ROS_ERROR("Contour ROI is larger than rotated slider ROI");
-        ROS_ERROR_STREAM(bounding_rect.x << ", " << bounding_rect.y << ", " << bounding_rect.width << ", " << bounding_rect.height << ", " << slider_roi_rot.cols << ", " << slider_roi_rot.rows);
-        return false;
-    }
-
-    cv::Mat slider_roi_rot_roi(slider_roi_rot, bounding_rect);
-
-
-    //step 5
-    cv::Rect center_slice(0, static_cast<int>((float)slider_roi_rot_roi.rows / 2) - 1, slider_roi_rot_roi.cols, 3);
-    cv::Mat slider_roi_rot_center(slider_roi_rot_roi, center_slice);
-    cv::Mat binary_img;
-    cv::threshold(slider_roi_rot_center, binary_img, 50, 255, cv::THRESH_BINARY);
-
-    //step 6
-    cv::Mat temp = cv::Mat::zeros(3, 30, CV_8U);
-    cv::rectangle(temp, cv::Point(10, 0), cv::Point(20, 3), 255, -1, cv::LINE_AA);
-    cv::Mat result;
-    cv::matchTemplate(binary_img, temp, result, cv::TM_CCOEFF);
-    double min_val, max_val;
-    cv::Point min_loc;
-    cv::Point max_loc;
-    cv::minMaxLoc(result, &min_val, &max_val, &min_loc, &max_loc, cv::Mat());
-
-    // step 7: start transforming back to original image
-    max_loc.x += 15;
-    max_loc.y = static_cast<int>((float)slider_roi_rot_roi.rows / 2);
-    max_loc.x += bounding_rect.x;
-    max_loc.y += bounding_rect.y;
-
-    std::vector<cv::Point2f> pts;
-    pts.push_back(static_cast<cv::Point2f>(max_loc));
-    cv::transform(pts, pts, inv_rotation_matrix);
-    pts[0].x += min_x;
-    pts[0].y += min_y;
-    // end transforming back to original image
-    cv::circle(debug_image, pts[0], 5, cv::Scalar(0, 255, 0), 2, cv::LINE_AA);
-
-    // step 8
-    cv::Vec3f slider_circle;
-    cv::Vec3f slider_start_circle;
-    cv::Vec3f slider_end_circle;
-    slider_circle[0] = pts[0].x;
-    slider_circle[1] = pts[0].y;
-    slider_circle[2] = 5.0;
-
-
-    cv::Point start_pos_cv(0, static_cast<int>((float)slider_roi_rot_roi.rows / 2));
-    start_pos_cv.x += bounding_rect.x;
-    start_pos_cv.y += bounding_rect.y;
-    pts[0] = static_cast<cv::Point2f>(start_pos_cv);
-    cv::transform(pts, pts, inv_rotation_matrix);
-    pts[0].x += min_x;
-    pts[0].y += min_y;
-
-    slider_start_circle[0] = pts[0].x;
-    slider_start_circle[1] = pts[0].y;
-    slider_start_circle[2] = 5.0;
-
-    cv::Point end_pos_cv(slider_roi_rot_roi.cols - 1, static_cast<int>((float)slider_roi_rot_roi.rows / 2));
-    end_pos_cv.x += bounding_rect.x;
-    end_pos_cv.y += bounding_rect.y;
-    pts[0] = static_cast<cv::Point2f>(end_pos_cv);
-    cv::transform(pts, pts, inv_rotation_matrix);
-    pts[0].x += min_x;
-    pts[0].y += min_y;
-
-    slider_end_circle[0] = pts[0].x;
-    slider_end_circle[1] = pts[0].y;
-    slider_end_circle[2] = 5.0;
-
-
-
-    PointCloud::Ptr slider_pc = get3DPointsInCircle(full_cloud, slider_circle);
-    PointCloud::Ptr slider_start_pc = get3DPointsInCircle(full_cloud, slider_start_circle);
-    PointCloud::Ptr slider_end_pc = get3DPointsInCircle(full_cloud, slider_end_circle);
-
-    Eigen::Vector4f slider_pos;
-    pcl::compute3DCentroid(*slider_pc, slider_pos);
-
-    Eigen::Vector4f slider_start_pos;
-    pcl::compute3DCentroid(*slider_start_pc, slider_start_pos);
-
-    Eigen::Vector4f slider_end_pos;
-    pcl::compute3DCentroid(*slider_end_pc, slider_end_pos);
-
-    double box_yaw = std::atan2((slider_start_pos[1] - slider_end_pos[1]), (slider_start_pos[0] - slider_end_pos[0]));
-    tf2::Quaternion q;
-    q.setRPY(0, 0, box_yaw);
-
-    geometry_msgs::PoseStamped pose;
-    pose.header.frame_id = pc_frame_id;
-    pose.header.stamp = ros::Time::now();
-    pose.pose.position.x = slider_pos[0];
-    pose.pose.position.y = slider_pos[1];
-    pose.pose.position.z = slider_pos[2];
-    pose.pose.orientation.x = q.x();
-    pose.pose.orientation.y = q.y();
-    pose.pose.orientation.z = q.z();
-    pose.pose.orientation.w = q.w();
-    slider_pose_publisher.publish(pose);
-
-    pose.header.frame_id = pc_frame_id;
-    pose.header.stamp = ros::Time::now();
-    pose.pose.position.x = slider_start_pos[0];
-    pose.pose.position.y = slider_start_pos[1];
-    pose.pose.position.z = slider_start_pos[2];
-    pose.pose.orientation.x = q.x();
-    pose.pose.orientation.y = q.y();
-    pose.pose.orientation.z = q.z();
-    pose.pose.orientation.w = q.w();
-    slider_start_pose_publisher.publish(pose);
-
-    pose.header.frame_id = pc_frame_id;
-    pose.header.stamp = ros::Time::now();
-    pose.pose.position.x = slider_end_pos[0];
-    pose.pose.position.y = slider_end_pos[1];
-    pose.pose.position.z = slider_end_pos[2];
-    pose.pose.orientation.x = q.x();
-    pose.pose.orientation.y = q.y();
-    pose.pose.orientation.z = q.z();
-    pose.pose.orientation.w = q.w();
-    slider_end_pose_publisher.publish(pose);
-
-
-    return true;
-}
-
-bool TaskBoardDetector::findDoorKnob(PointCloud::Ptr &full_cloud, cv::Mat &debug_image, const cv::Point &start_point, const std::string &pc_frame_id)
-{
-    /**
-     * 1. extract ROI from approximate position
-     * 2. circle detection on edges
-     * 3. find 3D points of first (and presumably only) circle and publish as a pose
-     */
-    double margin = 50.0;
-    double min_x = std::min(start_point.x - margin, start_point.x - margin);
-    double max_x = std::max(start_point.x + margin, start_point.x + margin);
-    double min_y = std::min(start_point.y - margin, start_point.y - margin);
-    double max_y = std::max(start_point.y + margin, start_point.y + margin);
-
-    if (min_x < 0 or min_y < 0 or max_x > debug_image.cols or max_y > debug_image.rows)
-    {
-        ROS_ERROR("Door knob ROI is larger than input image");
-        return false;
-    }
-
-    cv::Mat door_roi(debug_image, cv::Rect(cv::Point(min_x, min_y), cv::Point(max_x, max_y)));
-    cv::cvtColor(door_roi, door_roi, cv::COLOR_BGR2GRAY);
-    cv::GaussianBlur(door_roi, door_roi, cv::Size(3, 3), 0, 0);
-    cv::Mat door_edges;
-    cv::Canny(door_roi, door_edges, 30, 200, 3);
-
-    cv::blur(door_edges, door_edges, cv::Size(3,3));
-    std::vector<cv::Vec3f> circles;
-    cv::HoughCircles(door_edges, circles, cv::HOUGH_GRADIENT, 1, 20, 50, 20, 10, 50);
-    if (circles.empty())
-    {
-        ROS_ERROR_STREAM("Can't find door knob");
-        return false;
-    }
-    circles[0][0] += min_x;
-    circles[0][1] += min_y;
-    cv::circle(debug_image, cv::Point(circles[0][0], circles[0][1]), circles[0][2], cv::Scalar(0,255,255), 2, cv::LINE_AA);
-    PointCloud::Ptr door_pc = get3DPointsInCircle(full_cloud, circles[0]);
-    Eigen::Vector4f door_pos;
-    pcl::compute3DCentroid(*door_pc, door_pos);
-
-    geometry_msgs::PoseStamped pose;
-    pose.header.frame_id = pc_frame_id;
-    pose.header.stamp = ros::Time::now();
-    pose.pose.position.x = door_pos[0];
-    pose.pose.position.y = door_pos[1];
-    pose.pose.position.z = door_pos[2];
-    pose.pose.orientation.w = 1.0;
-    door_pose_publisher.publish(pose);
-
-    return true;
-}
 
 std::vector<cv::Point> TaskBoardDetector::getLargestContour(const cv::Mat &img)
 {
@@ -731,66 +274,6 @@ std::vector<cv::Point> TaskBoardDetector::getLargestContour(const cv::Mat &img)
     return contours[largest_contour_idx];
 }
 
-PointCloud::Ptr TaskBoardDetector::getPlane(const PointCloud::Ptr &full_cloud,
-                    pcl::ModelCoefficients::Ptr &coefficients, pcl::PlanarPolygon<PointT>::Ptr &hull_polygon,
-                    PointCloud::Ptr &hull_pointcloud)
-{
-    PointCloud::Ptr filtered_cloud(new PointCloud);
-    passthrough_filter.setInputCloud(full_cloud);
-    passthrough_filter.setFilterFieldName("x");
-    passthrough_filter.setFilterLimits(passthrough_x_min, passthrough_x_max);
-    passthrough_filter.filter(*filtered_cloud);
-
-    passthrough_filter.setInputCloud(filtered_cloud);
-    passthrough_filter.setFilterFieldName("y");
-    passthrough_filter.setFilterLimits(passthrough_y_min, passthrough_y_max);
-    passthrough_filter.filter(*filtered_cloud);
-
-    voxel_filter.setInputCloud(filtered_cloud);
-    voxel_filter.setLeafSize(voxel_leaf_size, voxel_leaf_size, voxel_leaf_size);
-    voxel_filter.filter(*filtered_cloud);
-
-    // indices of points which are part of the detected plane
-    pcl::PointIndices::Ptr inliers(new pcl::PointIndices);
-
-    PointCloudN::Ptr normals(new PointCloudN);
-    normal_estimation.setInputCloud(filtered_cloud);
-    normal_estimation.compute(*normals);
-
-    sac_segmentation.setAxis(Eigen::Vector3f(0.0, 0.0, 1.0));
-    sac_segmentation.setInputNormals(normals);
-    sac_segmentation.setInputCloud(filtered_cloud);
-    sac_segmentation.setOptimizeCoefficients(true);
-    sac_segmentation.setModelType(pcl::SACMODEL_PLANE);
-    sac_segmentation.setMethodType(pcl::SAC_RANSAC);
-    sac_segmentation.setDistanceThreshold(0.05);
-    sac_segmentation.setEpsAngle(0.3);
-
-    sac_segmentation.segment(*inliers, *coefficients);
-
-    if (inliers->indices.size() == 0)
-    {
-        std::cout << "could not find plane " << std::endl;
-        return full_cloud;
-    }
-
-    PointCloud::Ptr plane_cloud(new PointCloud);
-
-    project_inliers.setModelType(pcl::SACMODEL_PLANE);
-    project_inliers.setInputCloud(filtered_cloud);
-    project_inliers.setIndices(inliers);
-    project_inliers.setModelCoefficients(coefficients);
-    project_inliers.filter(*plane_cloud);
-
-    convex_hull.setInputCloud(plane_cloud);
-    convex_hull.reconstruct(*hull_pointcloud);
-    hull_pointcloud->points.push_back(hull_pointcloud->points.front());
-    hull_pointcloud->width += 1;
-    hull_polygon->setContour(*hull_pointcloud);
-    hull_polygon->setCoefficients(*coefficients);
-
-    return plane_cloud;
-}
 
 void TaskBoardDetector::erode(cv::Mat &img)
 {
