@@ -26,9 +26,9 @@ class SliderTest(object):
         self.fam = FullArmMovement()
         self.transform_utils = TransformUtils()
         self.joint_angles = rospy.get_param("~joint_angles", None)
-        self.fm = ForceMeasurmement(force_threshold=[15,15,15]) # force threshold in Newtons
+        self.fm = ForceMeasurmement() 
         self.setup_arm()
-        self.slider_action = SliderAction(self.fam, self.transform_utils)
+        self.slider_action = SliderAction(self.fam, self.transform_utils,self.fm)
 
     def setup_arm(self):
         """Setup the arm
@@ -39,7 +39,7 @@ class SliderTest(object):
         self.fam.clear_faults()
         self.fam.subscribe_to_a_robot_notification()
         self.fam.send_joint_angles(self.joint_angles["perceive_table"])
-        self.fam.execute_gripper_command(0.5)
+    
 
     def test(self):
         self.slider_action.do()
@@ -49,5 +49,5 @@ if __name__ == "__main__":
     rospy.init_node('Slider Test')
     slider_test = SliderTest()
     slider_test.test()
-    rospy.spin()
+
 

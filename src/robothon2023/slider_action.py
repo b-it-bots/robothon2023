@@ -3,7 +3,7 @@ import tf
 import rospy
 import numpy as np
 import math 
-from kortex_driver.msg import TwistCommand
+from kortex_driver.msg import TwistCommand, CartesianReferenceFrame
 
 from robothon2023.abstract_action import AbstractAction
 from robothon2023.full_arm_movement import FullArmMovement
@@ -14,20 +14,18 @@ from utils.force_measure import ForceMeasurmement
 
 class SliderAction(AbstractAction):
 
-    def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils):
+    def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils, fm: ForceMeasurmement):
         super().__init__(arm, transform_utils)
         self.arm = arm
-        # self.fm = ForceMeasurmement()
+        self.fm = ForceMeasurmement()
         self.tf_utils = transform_utils
         self.listener = tf.TransformListener()
         self.slider_pose = PoseStamped()
-        self.slider_pose = rospy.wait_for_message('/task_board_detector/slider_start_pose', PoseStamped)
         self.get_slider_pose()
-        # self.slider_pose_sub = rospy.Subscriber('/mcr_perception/object_selector/output/object_pose', PoseStamped, self.slider_pose_callback, queue_size=10)
+
         self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
 
-        self.retract_arm_velocity = 0.02 # m/s
-        
+        self.tooltip_pose_sub = rospy.Subscriber('/my_gen3/base_feedback', PoseStamped, self.tooltip_pose_callback)
 
         print("Slider Action Initialized")
         
@@ -39,49 +37,46 @@ class SliderAction(AbstractAction):
     def act(self) -> bool:
         print ("in act")
 
-        # velocity_value = 0.01 # m/s
-        distance = 0.045 - 0.010 # m  (0.045 is the length the slider can travel and 0.005 is a small offset for safety reasons)
-        time = 3 # s
-
-        velocity_value = round(distance/time , 3) # m/s
-
-        self.slider_velocity_twist = self.create_twist_from_velocity(velocity_value)
-
-        rospy.loginfo(">> close gripper <<")
-        self.arm.execute_gripper_command(0.55)
 
         rospy.loginfo(">> Moving arm to slider <<")
-        self.move_arm_to_slider()
+        if not self.move_arm_to_slider():
+            return False
 
         rospy.loginfo(">> Clossing gripper <<")
-        self.arm.execute_gripper_command(0.75) # close gripper to 85% 
+        if not self.arm.execute_gripper_command(0.53    ):
+            return False
 
-        self.slider_velocity_twist = self.create_twist_from_velocity(velocity_value)
+        rospy.loginfo(">> Approaching slider with caution <<")
+        if not self.approach_slider_with_caution():
+            return False
 
         rospy.loginfo(">> Moving arm along the slider <<")
-        self.move_arm_along_slider()
-        rospy.sleep(time)
+        if not self.move_arm_along_slider():
+            return False
 
         rospy.loginfo(">> Stopping arm <<")
-        self.stop_arm()
-        rospy.sleep(1)
+        if not self.stop_arm():
+            return False
 
         rospy.loginfo(">> Moving slider back  <<")
-        self.move_slider_back()
-        rospy.sleep(time)
+        if not self.move_slider_back():
+            return False
 
         rospy.loginfo(">> Stopping arm <<")
-        self.stop_arm()
+        if not self.stop_arm():
+            return False
 
-        rospy.loginfo(">> open gripper <<")
-        self.arm.execute_gripper_command(0.50)
+        # rospy.loginfo(">> open gripper <<")
+        # if not self.arm.execute_gripper_command(0.50):
+        #     return False
 
         rospy.loginfo(">> Retract arm back <<")
-        self.retract_arm_back()
-        rospy.sleep(3)
+        if not self.retract_arm_back():
+            return False
 
         rospy.loginfo(">> Stopping arm <<")
-        self.stop_arm()
+        if not self.stop_arm():
+            return False
 
         rospy.loginfo(">> Process finished successfully <<")
 
@@ -96,86 +91,145 @@ class SliderAction(AbstractAction):
     def do(self) -> bool:
         return self.act()
 
+
+    def tooltip_pose_callback(self, msg):
+        self.tooltip_pose_z_with_base = msg.base.tool_pose_z
+
+
+    def move_arm_to_slider(self):
+        """
+        Move arm to along slider in with velocity vector
+        """
+
+        offset = 0.08
+        rospy.loginfo("slider pose below")
+        print(self.slider_pose)
+        slider_pose = self.rotate_Z_down(self.slider_pose)
+        pose_to_send = get_kinovapose_from_pose_stamped(slider_pose)
+        pose_to_send.z += offset # add 10 cm to the z axis and then approach the slider
+
+        success = self.arm.send_cartesian_pose(pose_to_send)
+        if not success:
+            return False
+        return True
+
+    def approach_slider_with_caution(self):
+        """
+        Approach slider with caution
+        """
+
+        offset = 0.05 # offset for the distance from tool frame to the tool tip
+        rate_loop = rospy.Rate(10)
+        self.fm.set_force_threshold(force=[10,10,4]) # force in z increases to 4N when it is in contact with the board
+
+        # enable force monitoring
+        self.fm.enable_monitoring()
+        
+        # calculate velocity
+        distance = offset; time = 7 # move 5 cm in 6 seconds
+        velocity = distance/time
+
+        # create twist command to move towards the slider
+        approach_twist = TwistCommand()
+        approach_twist.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        approach_twist.twist.linear_z = velocity
+
+        while not self.fm.force_limit_flag and not rospy.is_shutdown(): 
+            # check for force limit flag and stop if it is true
+            # check for the z axis of the tooltip and stop if it is less than 0.111(m) (the z axis of the slider) from base frame
+
+            if self.fm.force_limit_flag:
+                break
+            self.cartesian_velocity_pub.publish(approach_twist)
+            rate_loop.sleep()
+
+        success = self.stop_arm()
+        if not success:
+            return False
+        
+        self.fm.disable_monitoring()
+
+        distance = 0.008 ; time = 1 # move back 8 mm
+        velocity = distance/time
+
+        retract_twist = TwistCommand()
+        retract_twist.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        retract_twist.twist.linear_z = -velocity
+        if self.fm.force_limit_flag:
+            self.cartesian_velocity_pub.publish(retract_twist)
+            rospy.sleep(time)
+        
+        self.stop_arm()
+        return True
+
+
+    def move_arm_along_slider(self):
+        """
+        Move arm along slider in with velocity vector
+        """
+
+        distance = 0.042 # m  (0.045 is the length the slider can travel and 0.005 is a small offset for safety reasons)
+        time = 3 # s
+        slider_velocity = round(distance/time , 3) # m/s
+
+        slider_velocity_cmd = TwistCommand()
+        slider_velocity_cmd.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        slider_velocity_cmd.twist.linear_x = slider_velocity
+
+        self.cartesian_velocity_pub.publish(slider_velocity_cmd)
+        rospy.sleep(time)
+
+        return True
+
+    def move_slider_back(self):
+        """
+        Move arm back
+        """
+        distance = 0.05 # m  (0.045 is the length the slider can travel and 0.005 is a small offset for safety reasons)
+        time = 3 # s
+        slider_velocity = round(distance/time , 3) # m/s
+        
+        slider_velocity_cmd = TwistCommand()
+        slider_velocity_cmd.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        slider_velocity_cmd.twist.linear_x = -slider_velocity
+
+        self.cartesian_velocity_pub.publish(slider_velocity_cmd)
+        rospy.sleep(time)
+
+        return True
     
-    def slider_pose_callback(self, msg):
+    def retract_arm_back(self):
         """
-        Callback function for slider pose
+        Move arm back using twist command
         """
-        print("Slider pose received")
+        retract_velocity = 0.02 # m/s
+        retract_twist_cmd = TwistCommand()
+        retract_twist_cmd.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        retract_twist_cmd.twist.linear_z = -retract_velocity # neg velocity for upwards movement
+        self.cartesian_velocity_pub.publish(retract_twist_cmd)
+        rospy.sleep(3.0)
+        return True
 
-        self.slider_pose = msg.pose
-
-    def create_twist_from_velocity(self, velocity) -> Twist:
+    def stop_arm(self):
         """
-        Create Twist message from velocity vector
-
-        input: velocity vector :: np.array
-        output: velocity vector :: Twist
-        """
-
-        # convert pose.orientation to yaw
-        orientation = self.slider_pose.pose.orientation
-        quaternion = (orientation.x, orientation.y, orientation.z, orientation.w)
-        euler = tf.transformations.euler_from_quaternion(quaternion)
-        yaw = euler[2]
-
-        print("yaw: ", yaw)
-
-        velocity_vector = Twist()
-        velocity_vector.linear.x = velocity * math.cos(yaw)
-        velocity_vector.linear.y = velocity * math.sin(yaw)
-        velocity_vector.linear.z = 0
-
-        velocity_vector.angular.x = 0
-        velocity_vector.angular.y = 0
-        velocity_vector.angular.z = 0
-               
-        return velocity_vector
-
-    def convert_twist_twistcommand(self, velocity: Twist) -> TwistCommand:
-
-        velocity_cmd = TwistCommand()
-        velocity_cmd.twist.linear_x = velocity.linear.x
-        velocity_cmd.twist.linear_y = velocity.linear.y
-        velocity_cmd.twist.linear_z = velocity.linear.z
-
-        return velocity_cmd
-    
-    def create_pose_from_velocity(self, velocity) -> PoseStamped:
-        """
-        Create PoseStamped message from velocity vector
-
-        input: velocity vector :: np.array
-        output: velocity vector :: PoseStamped
+        Stop arm by sending zero velocity
         """
 
-        velocity_vector = PoseStamped()
-        velocity_vector.header.frame_id = "board_link" # change to slider_start_link when not in pose mockup
-        velocity_vector.header.stamp = rospy.Time.now()
-        velocity_vector.pose.position.x = 0
-        velocity_vector.pose.position.y = velocity
-        velocity_vector.pose.position.z = 0
-        velocity_vector.pose.orientation.x = 0
-        velocity_vector.pose.orientation.y = 0
-        velocity_vector.pose.orientation.z = 0
-                                         
-        # transform velocity vector to base frame
-        velocity_vector_base = self.transform_utils.transformed_pose_with_retries(velocity_vector, "base_link")
+        velocity_vector = TwistCommand()
+        velocity_vector.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED # for proper joypad control
+        self.cartesian_velocity_pub.publish(velocity_vector)
+        return True
 
-        return velocity_vector_base
-    
-    def transform_velocity_vector_from_slider_to_base(self, velocity_vector: PoseStamped) -> PoseStamped:
+    def get_slider_pose(self):
         """
-        Transform velocity vector from slider to base frame
-
-        input: velocity vector :: PoseStamped
-        output: velocity vector :: PoseStamped
+        Get slider pose
         """
+        msg = PoseStamped()
+        msg.header.frame_id = "slider_start_link"
+        msg.header.stamp = rospy.Time(0)
+        self.slider_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
 
-        # transform velocity vector to base frame
-        velocity_vector_base = self.transform_utils.transformed_pose_with_retries(velocity_vector, "base_link")
-
-        return velocity_vector_base
+        return True
 
     def rotate_Z_down(self, msg: PoseStamped) -> PoseStamped:
 
@@ -185,7 +239,8 @@ class SliderAction(AbstractAction):
         # quaternion to euler for given pose
         e = list(tf.transformations.euler_from_quaternion([msg.pose.orientation.x, msg.pose.orientation.y, msg.pose.orientation.z, msg.pose.orientation.w]))
 
-        rot_eluer = [math.pi, 0.0,0.0]  # rotate 180 degrees around z axis (down) and the y will be in opposite direction than original
+        rot_eluer = [math.pi, 0.0,math.pi]  # rotate 180 degrees around x axis to make the z pointing (down) and the y will be in opposite direction than original and we 
+        # add 180 around z axis to set the orientation of camera facing the gui screen 
 
         e[0] += rot_eluer[0]
         e[1] += rot_eluer[1]
@@ -194,103 +249,8 @@ class SliderAction(AbstractAction):
         q = list(tf.transformations.quaternion_from_euler(e[0], e[1], e[2]))
 
         msg.pose.orientation = Quaternion(*q)
-        msg.pose.position.z += 0.06 # add 15 cm to the z axis and then approach the slider
         msg = self.transform_utils.transformed_pose_with_retries(msg, 'base_link')
         return msg
-
-    def move_arm_to_slider(self):
-        """
-        Move arm to along slider in with velocity vector
-        """
-
-        rospy.loginfo("slider pose below")
-        print(self.slider_pose)
-        slider_pose = self.rotate_Z_down(self.slider_pose)
-        pose_to_send = get_kinovapose_from_pose_stamped(slider_pose)
-        self.arm.send_cartesian_pose(pose_to_send)
-        return True
-
-    def move_arm_along_slider(self):
-        """
-        Move arm along slider in with velocity vector
-        """
-        
-        self.slider_velocity_twist.linear.x = -self.slider_velocity_twist.linear.x
-        self.slider_velocity_twist.linear.y = -self.slider_velocity_twist.linear.y
-        print(self.slider_velocity_twist)
-        slider_velocity = self.convert_twist_twistcommand(self.slider_velocity_twist)
-        self.cartesian_velocity_pub.publish(slider_velocity)
-        return True
-
-    def move_slider_back(self):
-        """
-        Move arm back
-        """
-        
-        self.slider_velocity_twist.linear.x = -self.slider_velocity_twist.linear.x
-        self.slider_velocity_twist.linear.y = -self.slider_velocity_twist.linear.y
-
-        slider_velocity = self.convert_twist_twistcommand(self.slider_velocity_twist)
-        print(self.slider_velocity_twist)
-        self.cartesian_velocity_pub.publish(slider_velocity)
-        return True
-    
-    def retract_arm_back(self):
-        """
-        Move arm back using twist command
-        """
-        retract_twist = Twist()
-        retract_twist.linear.z = self.retract_arm_velocity
-        retract_twist_command = self.convert_twist_twistcommand(retract_twist)
-        self.cartesian_velocity_pub.publish(retract_twist_command)
-        return True
-
-    def stop_arm(self):
-        """
-        Stop arm by sending zero velocity
-        """
-
-        velocity_vector = TwistCommand()
-        velocity_vector.twist.linear_x = 0.0
-        velocity_vector.twist.linear_y = 0.0
-        velocity_vector.twist.linear_z = 0.0
-        velocity_vector.twist.angular_x = 0.0
-        velocity_vector.twist.angular_y = 0.0
-        velocity_vector.twist.angular_z = 0.0
-        self.cartesian_velocity_pub.publish(velocity_vector)
-
-    def calculate_velocity_vector(self, velocity):
-        """
-        Calculate velocity vector from velocity
-
-        input: velocity :: float
-        output: velocity vector :: np.array
-        """
-
-        yaw = tf.trasformations.euler_from_quaternion(self.slider_pose.pose.orientation)[2]
-
-        velocity_twist_command = TwistCommand()
-        velocity_twist_command.twist.linear_x = velocity * math.cos(yaw)
-        velocity_twist_command.twist.linear_y = velocity * math.sin(yaw)
-        velocity_twist_command.twist.linear_z = 0.0
-        velocity_twist_command.twist.angular_x = 0.0
-        velocity_twist_command.twist.angular_y = 0.0
-        velocity_twist_command.twist.angular_z = 0.0
-
-        return velocity_twist_command
-    
-    def get_slider_pose(self):
-        """
-        Get slider pose
-        """
-        msg = PoseStamped()
-        msg.header.frame_id = "slider_start_link"
-        msg.header.stamp = rospy.Time(0)
-        self.slider_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
-        print("Slider pose received")
-        print(self.slider_pose)
-
-
 
 
 
