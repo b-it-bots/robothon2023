@@ -38,8 +38,18 @@ roslaunch kinova_vision kinova_vision_rgbd.launch
 
 Visualize stuff in Rviz using [config/robothon.rviz](config/robothon.rviz)
 
-# Manipulation First step 
-## Button Press example 
+## Run
+The following launch file will move the arm to the perceive pose, trigger the `task_board_detector` and then execute the actions as specified by the [task_order](config/task_params.yaml) parameter.
+```
+roslaunch robothon2023 task_sm.launch
+```
+If you want to trigger the `task_board_detector` separately, run:
+```
+rostopic pub /task_board_detector/event_in std_msgs/String e_start
+```
+
+## Manipulation First step 
+### Button Press example 
 
 > :warning: **Below command will move the robot to holding position then moves down**
   
@@ -48,7 +58,7 @@ Visualize stuff in Rviz using [config/robothon.rviz](config/robothon.rviz)
 ```
 roslaunch robothon2023 button_press_test.launch
 ```
-### Expected behaviour
+#### Expected behaviour
 * The arm moves above the button
 * Moves slowly in velocity mode in down direction 
 * The button is pressed and then the arm moves up
