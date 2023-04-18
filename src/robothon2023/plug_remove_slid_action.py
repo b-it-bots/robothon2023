@@ -221,7 +221,8 @@ class PlugRemoveSlidAction(AbstractAction):
                 force_control_loop_rate.sleep()
                 continue
             msg = kortex_driver.msg.TwistCommand()
-            msg.twist.linear_z = -linear_vel_z
+            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            msg.twist.linear_z = linear_vel_z
             # print("Force: {}".format(abs(np.mean(self.current_force_z) - self.current_force_z[-1])))
             if abs(np.mean(self.current_force_z) - self.current_force_z[-1]) > force_z_diff_threshold:
                 rospy.loginfo("Force difference threshold reached")
@@ -232,7 +233,8 @@ class PlugRemoveSlidAction(AbstractAction):
                 break
             force_control_loop_rate.sleep()
         msg = kortex_driver.msg.TwistCommand()
-        msg.twist.linear_z = linear_vel_z
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        msg.twist.linear_z = -linear_vel_z
         for idx in range(10):
             self.cart_vel_pub.publish(msg)
             force_control_loop_rate.sleep()
@@ -246,6 +248,7 @@ class PlugRemoveSlidAction(AbstractAction):
     def move_arm_2D_space(self, direction):
 
         msg = kortex_driver.msg.TwistCommand()
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
         if direction == 0:
             rospy.loginfo("Stopped moving")
             msg.twist.linear_x = 0.0
@@ -265,8 +268,9 @@ class PlugRemoveSlidAction(AbstractAction):
         rospy.loginfo("Moving up")
         pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.20)
         msg = kortex_driver.msg.TwistCommand()
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
         for idx in range(40):
-            msg.twist.linear_z = 0.01
+            msg.twist.linear_z = -0.01
             self.cart_vel_pub.publish(msg)
             self.loop_rate.sleep()
         msg.twist.linear_z = 0.0
@@ -277,8 +281,9 @@ class PlugRemoveSlidAction(AbstractAction):
     def move_forward(self):
         rospy.loginfo("Moving forward")
         msg = kortex_driver.msg.TwistCommand()
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
         for idx in range(20):
-            msg.twist.linear_x = 0.01
+            msg.twist.linear_y = 0.01
             self.cart_vel_pub.publish(msg)
             self.loop_rate.sleep()
         msg.twist.linear_x = 0.0
