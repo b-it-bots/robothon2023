@@ -14,6 +14,7 @@ import tf
 from std_msgs.msg import Int16MultiArray , String
 from kortex_driver.msg import TwistCommand
 import kortex_driver
+import numpy as np
 
 from kortex_driver.srv import *
 from kortex_driver.msg import *
@@ -24,19 +25,30 @@ class ForceMeasurmement:
 
     def __init__(self, force_threshold: list = [10, 10, 10], topic_name: String = "None"):
         self._force_subscriber = rospy.Subscriber("/my_gen3/base_feedback", kortex_driver.msg.BaseCyclic_Feedback, self._force_callback)
-        self.pub_force_status = rospy.Publisher('/my_gen3/end_effector_force_status'+'/'+topic_name, Int16MultiArray, queue_size=5)
         self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
-        self._force = None
+        self._force = {'x': [], 
+                       'y': [], 
+                       'z': []}
+
         self._force_threshold = force_threshold 
+        self.monitoring = False
+        self.force_limit_flag = False
 
         self.fam = FullArmMovement()
 
     def _force_callback(self, msg):
-        self._force = [msg.base.tool_external_wrench_force_x, 
-                       msg.base.tool_external_wrench_force_y,
-                       msg.base.tool_external_wrench_force_z]
+
+        self._force['x'].append(msg.base.tool_external_wrench_force_x)
+        self._force['y'].append(msg.base.tool_external_wrench_force_y)
+        self._force['z'].append(msg.base.tool_external_wrench_force_z)
+
+        if len(self._force['x']) > 25:
+            self._force['x'].pop(0)
+            self._force['y'].pop(0)
+            self._force['z'].pop(0)
         
-        self.force_check() # check if force is greater than threshold in continuous
+        if self.monitoring:
+            self.force_check() # check if force is greater than threshold in continuous
 
     def set_force_threshold(self, force):
         """
@@ -57,9 +69,12 @@ class ForceMeasurmement:
 
         force_limit = self._force_threshold
 
-        # rospy.loginfo("Current force: {}".format(current_force))
+        force_accumulated = [0,0,0]
 
-        # bool_array = Int16MultiArray()
+        force_accumulated[0] = abs(np.mean(self._force['x']))
+        force_accumulated[1] = abs(np.mean(self._force['y']))
+        force_accumulated[2] = abs(np.mean(self._force['z']))
+
         yellow = "\033[93m"
 
         data = [0,0,0]
@@ -67,7 +82,7 @@ class ForceMeasurmement:
         # convert list into dict
         force_dict = {}
         idx = ['x', 'y', 'z']
-        for i, f in zip(idx,self._force):
+        for i, f in zip(idx,force_accumulated):
             force_dict[i] = f
 
         if force_dict['x'] > force_limit[0]:
@@ -84,17 +99,37 @@ class ForceMeasurmement:
             rospy.loginfo(yellow + "Force limit reached in z direction" + "\033[0m")
             rospy.loginfo(force_dict['z'])
             data[2] = 1
-        
-        # bool_array.data = data
-        # self.pub_force_status.publish(bool_array)
 
         if data[0] == 1 or data[1] == 1 or data[2] == 1:
+            self.set_force_limit_flag()
+        if force_dict["x"] > 25 or force_dict["y"] > 25 or force_dict["z"] > 25:
             self.fam.apply_E_STOP()
-            # self.fam.clear_faults()
+
     
     # Returns the force measured by the robot
     def get_force(self):
         return self._force
+
+    def enable_monitoring(self):
+        
+        self.monitoring = True
+        return True
+    
+    def disable_monitoring(self):
+
+        self.monitoring = False
+        return True
+
+    def set_force_limit_flag(self):
+
+        self.force_limit_flag = True
+        return True
+    
+    def reset_force_limit_flag(self):
+            
+        self.force_limit_flag = False
+        return True 
+
 
 if __name__ == "__main__":
     pass
