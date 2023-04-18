@@ -235,7 +235,7 @@ class FullArmMovement:
                 rospy.loginfo("Received ACTION_END notification")
                 return True
             elif (self.last_action_notif_type == ActionEvent.ACTION_ABORT):
-                rospy.loginfo("Received ACTION_ABORT notification")
+                rospy.logerr("Received ACTION_ABORT notification")
                 return False
             else:
                 time.sleep(0.01)
@@ -406,15 +406,19 @@ class FullArmMovement:
             time.sleep(0.5)
             return True
 
-    def send_cartesian_pose(self, pose: KinovaPose):
+    def send_cartesian_pose(self, pose: KinovaPose, num_retries: int = 3):
         '''
         input: pose (PoseStamped)
         output: success (bool)
         takes in a pose and moves the arm to that pose in cartesian space
         '''
         self.last_action_notif_type = None
-        
-        return self.traverse_waypoints([pose])
+        for idx in range(num_retries):
+            success = self.traverse_waypoints([pose])
+            if success:
+                break
+            time.sleep(0.01)
+        return success
 
     def main(self):
         # For testing purposes
