@@ -23,11 +23,12 @@ class ButtonPressAction(AbstractAction):
     - stop when the force is higher 
     - retreat above 
     """
-    def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
+    def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils, reference_frame: str ='board_link') -> None:
         super(ButtonPressAction, self).__init__(arm, transform_utils)
         self.base_feedback_sub = rospy.Subscriber('/my_gen3/base_feedback', kortex_driver.msg.BaseCyclic_Feedback, self.base_feedback_cb)
         self.cart_vel_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
         self.current_force_z = []
+        self.button_reference_frame = reference_frame
 
     def base_feedback_cb(self, msg):
         self.current_force_z.append(msg.base.tool_external_wrench_force_z)
@@ -38,11 +39,12 @@ class ButtonPressAction(AbstractAction):
         print ("in pre perceive")
 
         pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.05)
-        kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name="board_link",
+        kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name=self.button_reference_frame,
                                                                       target_frame_name="base_link",
-                                                                      offset_linear=[0.01, 0.01, pre_height_above_button],
+                                                                      offset_linear=[0.0, 0.0, pre_height_above_button],
                                                                       offset_rotation_euler=[math.pi, 0.0, math.pi/2])
 
+        self.arm.execute_gripper_command(1.0)
         self.arm.send_cartesian_pose(kinova_pose)
         return True
 
@@ -72,8 +74,8 @@ class ButtonPressAction(AbstractAction):
                 break
             force_control_loop_rate.sleep()
         msg = kortex_driver.msg.TwistCommand()
-        msg.twist.linear_z = linear_vel_z
-        for idx in range(10):
+        msg.twist.linear_z = linear_vel_z * 5
+        for idx in range(20):
             self.cart_vel_pub.publish(msg)
             force_control_loop_rate.sleep()
         msg.twist.linear_z = 0.0
@@ -84,8 +86,10 @@ class ButtonPressAction(AbstractAction):
 
     def verify(self) -> bool:
         print ("in verify")
-        kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name="gui_verify",
+        pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.05)
+        kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name="gui_link",
                                                                       target_frame_name="base_link",
+                                                                      offset_linear=[0.0, 0.0, pre_height_above_button],
                                                                       offset_rotation_euler=[math.pi, 0.0, math.pi/2])
 
         self.arm.send_cartesian_pose(kinova_pose)

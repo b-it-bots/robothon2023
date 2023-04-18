@@ -1,0 +1,11 @@
+<?xml version="1.0"?>
+
+<launch>
+    <node pkg="robothon2023" type="task_sm.py" name="task_sm" output="screen">
+        <rosparam command="load" file="$(find robothon2023)/config/boundary_safety.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/task_params.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/trajectories.yaml"/>
+        <remap from="~board_detector_event_out" to="/task_board_detector/event_out" />
+        <remap from="~board_detector_event_in" to="/task_board_detector/event_in" />
+    </node>
+</launch>

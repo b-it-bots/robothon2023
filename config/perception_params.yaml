@@ -1,2 +1,2 @@
 target_frame: base_link
-num_detections_of_board: 25 # number of button detections of which we take the median
+num_detections_of_board: 10 # number of button detections of which we take the median

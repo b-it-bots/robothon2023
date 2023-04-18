@@ -11,14 +11,37 @@ TaskBoardDetector::TaskBoardDetector(ros::NodeHandle &nh) : nh(nh), received_cam
     board_pose_publisher = nh.advertise<geometry_msgs::PoseStamped>("approximate_board_pose", 1);
     camera_info_sub = nh.subscribe<sensor_msgs::CameraInfo>("camera_info_topic", 1, &TaskBoardDetector::cameraInfoCallback, this);
 
-    image_sub = new message_filters::Subscriber<sensor_msgs::Image> (nh, "input_image_topic", 1);
-    cloud_sub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (nh, "input_pointcloud_topic", 1);
-    msg_sync = new message_filters::Synchronizer<msgSyncPolicy> (msgSyncPolicy(10), *image_sub, *cloud_sub);
-    msg_sync->registerCallback(boost::bind(&TaskBoardDetector::synchronizeCallback, this, _1, _2));
+    event_in_subscriber = nh.subscribe<std_msgs::String>("event_in", 1, &TaskBoardDetector::eventInCallback, this);
+    event_out_publisher = nh.advertise<std_msgs::String>("event_out", 1);
+
 }
 
 TaskBoardDetector::~TaskBoardDetector()
 {
+}
+
+void TaskBoardDetector::eventInCallback(const std_msgs::StringConstPtr &msg)
+{
+    if (msg->data == "e_start")
+    {
+        ROS_INFO_STREAM("Starting board detection");
+        image_sub = new message_filters::Subscriber<sensor_msgs::Image> (nh, "input_image_topic", 1);
+        cloud_sub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (nh, "input_pointcloud_topic", 1);
+        msg_sync = new message_filters::Synchronizer<msgSyncPolicy> (msgSyncPolicy(10), *image_sub, *cloud_sub);
+        msg_sync->registerCallback(boost::bind(&TaskBoardDetector::synchronizeCallback, this, _1, _2));
+    }
+    else if (msg->data == "e_stop")
+    {
+        ROS_INFO_STREAM("Stopped board detection");
+        if (image_sub)
+        {
+            image_sub->unsubscribe();
+            cloud_sub->unsubscribe();
+        }
+        std_msgs::String stop_msg;
+        stop_msg.data = "e_stopped";
+        event_out_publisher.publish(stop_msg);
+    }
 }
 
 void TaskBoardDetector::cameraInfoCallback(const sensor_msgs::CameraInfoConstPtr &msg)

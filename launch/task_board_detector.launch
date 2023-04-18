@@ -12,6 +12,7 @@
             <rosparam file="$(find robothon2023)/config/fixed_transforms.yaml" command="load"/>
             <remap from="~approximate_board_pose" to="/task_board_detector/approximate_board_pose" />
             <remap from="~fixed_board_pose" to="/task_board_detector/fixed_board_pose" />
+            <remap from="~board_detector_event_out" to="/task_board_detector/event_out" />
         </node>
     </group>
 

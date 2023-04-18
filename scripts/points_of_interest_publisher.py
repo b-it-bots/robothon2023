@@ -9,6 +9,7 @@ import json
 import math
 
 import geometry_msgs.msg
+import std_msgs.msg
 import rospy
 import tf
 import numpy as np
@@ -23,7 +24,10 @@ class PointsOfInterestPublisher(object):
         self.board_pose_sub = rospy.Subscriber('~approximate_board_pose', geometry_msgs.msg.PoseStamped, self.board_pose_cb)
         self.board_pose_pub = rospy.Publisher('~fixed_board_pose', geometry_msgs.msg.PoseStamped, queue_size=1)
 
+        self.event_out_pub = rospy.Publisher('~board_detector_event_out', std_msgs.msg.String, queue_size=1)
+
         self.num_detections_of_board = rospy.get_param('/task_board_detector/num_detections_of_board')
+        board_to_blue_button = rospy.get_param("~board_to_blue_button")
         board_to_red_button = rospy.get_param("~board_to_red_button")
         board_to_slider_start = rospy.get_param("~board_to_slider_start")
         board_to_slider_end = rospy.get_param("~board_to_slider_end")
@@ -32,8 +36,8 @@ class PointsOfInterestPublisher(object):
         board_to_door_knob = rospy.get_param("~board_to_door_knob")
         board_to_gui = rospy.get_param("~board_to_gui")
 
-        self.all_transforms = [board_to_red_button, board_to_slider_start, board_to_slider_end, board_to_meter_plug_black, board_to_meter_plug_red, board_to_door_knob, board_to_gui]
-        self.all_link_names = ['red_button', 'slider_start', 'slider_end', 'meter_plug_black', 'meter_plug_red', 'door_knob', 'gui']
+        self.all_transforms = [board_to_blue_button, board_to_red_button, board_to_slider_start, board_to_slider_end, board_to_meter_plug_black, board_to_meter_plug_red, board_to_door_knob, board_to_gui]
+        self.all_link_names = ['blue_button', 'red_button', 'slider_start', 'slider_end', 'meter_plug_black', 'meter_plug_red', 'door_knob', 'gui']
         ns = '/task_board_detector/'
         self.pose_publishers = []
         for name in self.all_link_names:
@@ -56,6 +60,7 @@ class PointsOfInterestPublisher(object):
                 continue
             if self.fixed_board_pose is None:
                 self.fixed_board_pose = self.get_median_board_pose()
+                self.event_out_pub.publish('e_done')
                 self.board_pose_sub.unregister()
                 self.board_poses_queue = []
             self.tf_broadcaster.sendTransform((self.fixed_board_pose.pose.position.x,

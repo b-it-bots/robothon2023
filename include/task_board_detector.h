@@ -6,6 +6,7 @@
 #include <sensor_msgs/Image.h>
 #include <sensor_msgs/CameraInfo.h>
 #include <geometry_msgs/PolygonStamped.h>
+#include <std_msgs/String.h>
 #include <tf/transform_listener.h>
 #include <tf2/LinearMath/Quaternion.h>
 #include <tf2_ros/transform_broadcaster.h>
@@ -47,6 +48,10 @@ private:
     ros::Publisher image_publisher;
     ros::Publisher board_pose_publisher;
     ros::Subscriber camera_info_sub;
+
+    ros::Publisher event_out_publisher;
+    ros::Subscriber event_in_subscriber;
+
     boost::shared_ptr<tf::TransformListener> tf_listener;
     std::string target_frame;
     sensor_msgs::CameraInfoConstPtr camera_info;
@@ -61,6 +66,7 @@ private:
     void synchronizeCallback(const sensor_msgs::ImageConstPtr &image,
                  const sensor_msgs::PointCloud2ConstPtr &cloud);
     void cameraInfoCallback(const sensor_msgs::CameraInfoConstPtr &msg);
+    void eventInCallback(const std_msgs::StringConstPtr &msg);
     /**
      * find blue and red buttons in 2D and 3D, and determine orientation of the board
      */

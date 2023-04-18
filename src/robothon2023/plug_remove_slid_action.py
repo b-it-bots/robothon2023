@@ -66,6 +66,7 @@ class PlugRemoveSlidAction(AbstractAction):
                                                                       offset_linear=[0.00, 0.00, pre_height_above_button],
                                                                       offset_rotation_euler=[math.pi, 0.0, math.pi/2])
 
+        self.arm.execute_gripper_command(0.0)
         self.arm.send_cartesian_pose(kinova_pose)
         return True
 
@@ -77,10 +78,10 @@ class PlugRemoveSlidAction(AbstractAction):
         self.arm.execute_gripper_command(0.9) #close gripper
         self.move_up_velocity_control()
         self.move_forward()
-        pass
+        return True
 
     def verify(self) -> bool:
-        pass
+        return True
 
     def image_cb(self, msg):
         
