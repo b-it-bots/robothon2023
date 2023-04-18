@@ -36,7 +36,7 @@ class ButtonPressAction(AbstractAction):
             self.current_force_z.pop(0)
 
     def pre_perceive(self) -> bool:
-        print ("in pre perceive")
+        rospy.loginfo('[%s] pre-preceive' % self.__class__.__name__)
 
         pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.05)
         kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name=self.button_reference_frame,
@@ -49,7 +49,7 @@ class ButtonPressAction(AbstractAction):
         return True
 
     def act(self) -> bool:
-        print ("in act")
+        rospy.loginfo('[%s] starting action' % self.__class__.__name__)
         linear_vel_z = rospy.get_param("~linear_vel_z", 0.005)
         force_z_diff_threshold = rospy.get_param("~force_z_diff_threshold", 3.0)
         force_control_loop_rate = rospy.Rate(rospy.get_param("~force_control_loop_rate", 10.0))
@@ -65,7 +65,8 @@ class ButtonPressAction(AbstractAction):
                 force_control_loop_rate.sleep()
                 continue
             msg = kortex_driver.msg.TwistCommand()
-            msg.twist.linear_z = -linear_vel_z
+            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            msg.twist.linear_z = linear_vel_z
             if abs(np.mean(self.current_force_z) - self.current_force_z[-1]) > force_z_diff_threshold:
                 stop = True
                 msg.twist.linear_z = 0.0
@@ -74,7 +75,8 @@ class ButtonPressAction(AbstractAction):
                 break
             force_control_loop_rate.sleep()
         msg = kortex_driver.msg.TwistCommand()
-        msg.twist.linear_z = linear_vel_z * 5
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        msg.twist.linear_z = -linear_vel_z * 5
         for idx in range(20):
             self.cart_vel_pub.publish(msg)
             force_control_loop_rate.sleep()
