@@ -1,7 +1,7 @@
 # all transforms are x, y, yaw (in meters and radians respectively)
 board_to_blue_button: [0.0, 0.0, 0]
 board_to_red_button: [0.015, 0.0, 0]
-board_to_slider_start: [0.102, -0.035, 0]
+board_to_slider_start: [0.09, -0.035, 0]
 board_to_slider_end: [0.057, -0.035, 0]
 board_to_meter_plug_black: [0.0, -0.058, 0]
 board_to_meter_plug_red: [0.025, -0.058, 0]
