@@ -14,7 +14,7 @@ from utils.force_measure import ForceMeasurmement
 
 class SliderAction(AbstractAction):
 
-    def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils, fm: ForceMeasurmement):
+    def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils):
         super().__init__(arm, transform_utils)
         self.arm = arm
         self.fm = ForceMeasurmement()
