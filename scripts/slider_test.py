@@ -28,7 +28,7 @@ class SliderTest(object):
         self.joint_angles = rospy.get_param("~joint_angles", None)
         self.fm = ForceMeasurmement() 
         self.setup_arm()
-        self.slider_action = SliderAction(self.fam, self.transform_utils,self.fm)
+        self.slider_action = SliderAction(self.fam, self.transform_utils)
 
     def setup_arm(self):
         """Setup the arm
