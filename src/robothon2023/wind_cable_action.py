@@ -22,11 +22,11 @@ class WindCableAction(AbstractAction):
         return True
 
     def act(self) -> bool:
-        # TODO: run the below method to convert the poses to board_link frame and write to a yaml file
-        # it might need debugging
-        success = self.transform_poses()
+        # success = self.transform_poses()
 
-        # success = self.wind_cable()
+        success = self.wind_cable()
+
+        # success = self.test_transform()
 
         return success
 
@@ -38,7 +38,7 @@ class WindCableAction(AbstractAction):
 
         wind_cable_poses = []
         for i in range(1, 11):
-            pose = rospy.get_param("~wind_cable_poses/p" + str(i))
+            pose = rospy.get_param("~wind_cable_poses_board/p" + str(i))
             kp = get_kinovapose_from_list(pose)
             pose = kp.to_pose_stamped()
             pose_in_board = self.transform_utils.transformed_pose_with_retries(pose, "board_link")
@@ -46,7 +46,7 @@ class WindCableAction(AbstractAction):
         
         wind_cable_poses2 = []
         for i in range(1, 11):
-            pose = rospy.get_param("~wind_cable_poses2/p" + str(i))
+            pose = rospy.get_param("~wind_cable_poses_board2/p" + str(i))
             kp = get_kinovapose_from_list(pose)
             pose = kp.to_pose_stamped()
             pose_in_board = self.transform_utils.transformed_pose_with_retries(pose, "board_link")
@@ -63,14 +63,14 @@ class WindCableAction(AbstractAction):
             f.write("wind_cable_poses:\n")
             for i in range(1, 11):
                 print('i: ', i)
-                p: PoseStamped = wind_cable_poses[i]
+                p: PoseStamped = wind_cable_poses[i-1]
                 # convert orientation to euler angles using tf
                 euler = tf.transformations.euler_from_quaternion([p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])
                 f.write(f"  p{str(i)} : [{p.pose.position.x}, {p.pose.position.y}, {p.pose.position.z}, {euler[0]}, {euler[1]}, {euler[2]}]\n")
             f.write("wind_cable_poses2:\n")
             for i in range(1, 11):
                 print('i: ', i)
-                p: PoseStamped = wind_cable_poses2[i]
+                p: PoseStamped = wind_cable_poses2[i-1]
                 # convert orientation to euler angles using tf
                 euler = tf.transformations.euler_from_quaternion([p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])
                 f.write(f"  p{str(i)} : [{p.pose.position.x}, {p.pose.position.y}, {p.pose.position.z}, {euler[0]}, {euler[1]}, {euler[2]}]\n")
@@ -109,8 +109,12 @@ class WindCableAction(AbstractAction):
 
         success = self.arm.traverse_waypoints(wind_cable_kinova_poses)
 
+        print('first round done')
+
         wind_cable_kinova_poses2 = []
         for i in range(1, 11):
+            pose = rospy.get_param("~wind_cable_poses2/p" + str(i))
+
             # convert the euler angles to quaternion
             euler = [pose[3], pose[4], pose[5]]
             quaternion = tf.transformations.quaternion_from_euler(euler[0], euler[1], euler[2])
@@ -128,7 +132,9 @@ class WindCableAction(AbstractAction):
             # convert to kinova_pose
             kp = get_kinovapose_from_pose_stamped(msg_in_base)
 
-            wind_cable_kinova_poses.append(kp)
+            wind_cable_kinova_poses2.append(kp)
+
+        print('starting second round')
 
         success = self.arm.traverse_waypoints(wind_cable_kinova_poses2)
 
