@@ -94,5 +94,5 @@ class ButtonPressAction(AbstractAction):
                                                                       offset_linear=[0.0, 0.0, pre_height_above_button],
                                                                       offset_rotation_euler=[math.pi, 0.0, math.pi/2])
 
-        self.arm.send_cartesian_pose(kinova_pose)
+        # self.arm.send_cartesian_pose(kinova_pose) 
         return True
