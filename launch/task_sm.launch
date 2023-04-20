@@ -8,4 +8,6 @@
         <remap from="~board_detector_event_out" to="/task_board_detector/event_out" />
         <remap from="~board_detector_event_in" to="/task_board_detector/event_in" />
     </node>
+    <include file="$(find robothon2023)/launch/task_board_detector.launch" />
 </launch>
+

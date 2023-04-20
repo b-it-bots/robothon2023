@@ -70,6 +70,7 @@ class ButtonPressAction(AbstractAction):
             if abs(np.mean(self.current_force_z) - self.current_force_z[-1]) > force_z_diff_threshold:
                 stop = True
                 msg.twist.linear_z = 0.0
+                msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED #publish 0 vel in mixed frame
             self.cart_vel_pub.publish(msg)
             if stop:
                 break
@@ -80,6 +81,7 @@ class ButtonPressAction(AbstractAction):
         for idx in range(20):
             self.cart_vel_pub.publish(msg)
             force_control_loop_rate.sleep()
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED #publish 0 vel in mixed frame
         msg.twist.linear_z = 0.0
         self.cart_vel_pub.publish(msg)
         force_control_loop_rate.sleep()
