@@ -237,6 +237,6 @@ if __name__ == "__main__":
     PAP.test()
     # PAP.test_go_to_board()
     # PAP.test_press_button()
-    rospy.spin()
+    # rospy.spin()
     exit(0)
 

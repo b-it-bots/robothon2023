@@ -234,15 +234,14 @@ class ProbeAction(AbstractAction):
         msg.header.frame_id = "door_knob_link"
         msg.header.stamp = rospy.Time(0)
         msg.pose.position.x -= 0.015
-        # msg.pose.orientation.z += 180
 
-        door_knob_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True)
+        door_knob_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True, offset=[0.0, 0.0, -90.0])
 
         # convert the door knob pose to a kinova pose
         door_knob_kinova_pose = get_kinovapose_from_pose_stamped(door_knob_pose)
 
         # move up a bit
-        door_knob_kinova_pose.z += 0.022
+        door_knob_kinova_pose.z += 0.022 + 0.03
 
         # send the door knob pose to the arm
         print("[probe_action] moving to door knob position")
@@ -257,38 +256,46 @@ class ProbeAction(AbstractAction):
         print("[probe_action] reached door knob position")
 
         # linear_vel_z = 0.0025
-        vel = 0.05
+        vel = 0.03
 
-        angle = 45.0
+        angle = 25.0
         # w.r.t board link
         linear_vel_x = vel*math.cos(math.radians(angle))
         linear_vel_z = vel*math.sin(math.radians(angle))
 
         twist_base = self.create_twist_from_velocity(linear_vel_x)
         twist_base.linear.z = linear_vel_z
-        angular_vel_y = -0.1
+        angular_vel_x = -0.02
 
         msg = kortex_driver.msg.TwistCommand()
+        # twist_base.linear.z *= 0.5
 
-
-        for i in range(4):
+        print("twist_base.linear.z: ", twist_base.linear.z)
+        for i in range(3):
 
             msg.twist.linear_z = twist_base.linear.z
             msg.twist.linear_y = twist_base.linear.y 
             msg.twist.linear_x = twist_base.linear.x
-            msg.twist.angular_y = angular_vel_y
+            msg.twist.angular_x = -abs(angular_vel_x)
             self.cart_vel_pub.publish(msg)
 
-            twist_base.linear.z *= 0.18
-            angular_vel_y -= 0.15
+            # reduce velocity in z direction 
+
+            twist_base.linear.z = abs(math.log(twist_base.linear.z+1.0))
+            print("twist_base.linear.z: ", twist_base.linear.z)
+            print("angular_vel_x: ", angular_vel_x)
 
 
+
+            angular_vel_x -= 0.05
             rospy.sleep(1)
 
         msg.twist.linear_z = 0.0
         msg.twist.linear_x = 0.0
         msg.twist.linear_y = 0.0
+        msg.twist.angular_x = 0.0
         msg.twist.angular_y = 0.0
+        msg.twist.angular_z = 0.0
 
         self.cart_vel_pub.publish(msg)
 
@@ -341,7 +348,7 @@ class ProbeAction(AbstractAction):
 
 
             msg = PoseStamped()
-            msg.header.frame_id = "door_knob_rotated"
+            msg.header.frame_id = "door_knob_link"
             msg.header.stamp = rospy.Time(0)
 
             msg.pose.position.x -= 0.075
