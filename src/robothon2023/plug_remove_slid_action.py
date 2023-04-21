@@ -11,6 +11,21 @@ from cv_bridge import CvBridge, CvBridgeError
 import cv2
 from sensor_msgs.msg import Image
 import math
+import scipy.spatial as spatial
+
+def dilate(img, dilation_size=1):
+    dilation_shape = cv2.MORPH_RECT
+    element = cv2.getStructuringElement(dilation_shape, (2 * dilation_size + 1, 2 * dilation_size + 1),
+                                       (dilation_size, dilation_size))
+    img = cv2.dilate(img, element)
+    return img
+
+def erode(img, erosion_size=1):
+    erosion_shape = cv2.MORPH_RECT
+    element = cv2.getStructuringElement(erosion_shape, (2 * erosion_size + 1, 2 * erosion_size + 1),
+                                       (erosion_size, erosion_size))
+    img = cv2.erode(img, element)
+    return img
 
 
 class PlugRemoveSlidAction(AbstractAction):
@@ -21,33 +36,28 @@ class PlugRemoveSlidAction(AbstractAction):
     - Do visual servoing and adjust arm
     - Open gripper
     - Move arm with velocity control downwards
-    - stope when the force is higher 
+    - stope when the force is higher
     - retreate above
     - close gripper
-    - move up 
-    - go to fixed insert position 
+    - move up
+    - go to fixed insert position
     - Move downwards with velocity control
     - Check force for 2 levels - (board collision and slid force)  needs to be identified
     - Stop if board collision is hit
     - retreat above and random sample x and y pose
     - if slid force is there for some amount of time then collision force comes then open gripper
-    - 
+    -
     """
     def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
         super(PlugRemoveSlidAction, self).__init__(arm, transform_utils)
+        self.current_force_z = []
         self.base_feedback_sub = rospy.Subscriber('/my_gen3/base_feedback', kortex_driver.msg.BaseCyclic_Feedback, self.base_feedback_cb)
         self.cart_vel_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
         self.img_sub = rospy.Subscriber('/camera/color/image_raw', Image, self.image_cb)
         self.img_pub = rospy.Publisher('/visual_servoing_debug_img', Image, queue_size=10)
-        self.current_force_z = []
         self.loop_rate = rospy.Rate(10.0)
-        self.current_force_z = []
+        self.image = None
         self.bridge = CvBridge()
-        self.error = 0.0
-        self.error_threshold = 5.0
-        self.stop = False
-        self.velocity = 0.005
-        self.image_queue = []
         self.move_up_done = False
         self.move_down_done = False
         self.close_gripper_done = False
@@ -66,144 +76,275 @@ class PlugRemoveSlidAction(AbstractAction):
                                                                       offset_linear=[0.00, 0.00, pre_height_above_button],
                                                                       offset_rotation_euler=[math.pi, 0.0, math.pi/2])
 
-        self.arm.execute_gripper_command(0.0)
+        self.arm.execute_gripper_command(0.5)
         self.arm.send_cartesian_pose(kinova_pose)
         return True
 
 
     def act(self) -> bool:
-        #Allign camera 
-        self.run_visual_servoing()
+        print ("in act")
+        #Allign camera
+        self.run_visual_servoing(self.align_black_port, run=True)
         self.move_down_velocity_control()
         self.arm.execute_gripper_command(0.9) #close gripper
         self.move_up_velocity_control()
         self.move_forward()
+        self.run_visual_servoing(self.align_red_port, run=True)
+        self.move_down_insert()
         return True
 
     def verify(self) -> bool:
         return True
 
     def image_cb(self, msg):
-        
+
         # get the image from the message
         try:
             image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
         except CvBridgeError as e:
             print(e)
+        self.image = image
 
-        # store only the last 20 images
-        if len(self.image_queue) > 20:
-            self.image_queue.pop(0)
-        self.image_queue.append(image)
-
-
-    def run_visual_servoing(self):
+    def run_visual_servoing(self, vs_target_fn, run=True):
+        stop = False
         while not rospy.is_shutdown():
-            
-            if len(self.image_queue) == 0:
+            if self.image is None:
+                rospy.loginfo('waiting for image')
                 self.loop_rate.sleep()
                 continue
-            
-            image = self.image_queue[-1]
+            msg = kortex_driver.msg.TwistCommand()
+            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            x_error, y_error = vs_target_fn()
+            if x_error is None:
+                print('none')
+                msg.twist.linear_x = 0.0
+            if y_error is None:
+                print('none')
+                msg.twist.linear_y = 0.0
+            if x_error is not None:
+                rospy.loginfo('X Error: %.2f' % (x_error))
+                if x_error < 0:
+                    msg.twist.linear_x = -0.005
+                if x_error > 0:
+                    msg.twist.linear_x = 0.005
+                if abs(x_error) < 3:
+                    msg.twist.linear_x = 0.0
+                elif abs(x_error) < 10:
+                    msg.twist.linear_x *= 0.5
 
-            circularity_threshold = 0.8
-            contours_area_threshold = 100
-            black_color_threshold = 60
-            
-            # find the contours
-            # convert the image to grayscale
-            gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-            # apply gaussian blur to the image
-            blur = cv2.GaussianBlur(gray, (5, 5), 0)
-            # apply canny edge detection
-            canny = cv2.Canny(blur, 50, 150)
-            # find the contours
-            contours, _ = cv2.findContours(
-                canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            if y_error is not None:
+                rospy.loginfo('Y Error: %.2f' % (y_error))
+                if y_error < 0:
+                    msg.twist.linear_y = -0.005
+                if y_error > 0:
+                    msg.twist.linear_y = 0.005
+                if abs(y_error) < 3:
+                    msg.twist.linear_y = 0.0
+                elif abs(y_error) < 10:
+                    msg.twist.linear_y *= 0.5
+            if run:
+                self.cart_vel_pub.publish(msg)
+                if msg.twist.linear_x == 0.0 and msg.twist.linear_y == 0 and x_error is not None and y_error is not None:
+                    break
+            self.loop_rate.sleep()
+        msg = kortex_driver.msg.TwistCommand()
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
+        self.cart_vel_pub.publish(msg)
 
-            # draw a horizontal line in the middle of the image
-            horizontal_line = [(0, image.shape[0] // 2),
-                            (image.shape[1], image.shape[0] // 2)]
-            cv2.line(image, horizontal_line[0], horizontal_line[1], (0, 0, 255), 2)
+    def align_black_port(self):
+        min_x = 280
+        max_x = 1000
+        min_y = 100
+        max_y = 710
+        ## These are targets when tool_pose_z = approx 0.148 m
+        target_x = 356
+        target_y = 330
 
-            # draw a vertical line in the middle of the image
-            vertical_line = [(image.shape[1] // 2, 0),
-                            (image.shape[1] // 2, image.shape[0])]
-            cv2.line(image, vertical_line[0], vertical_line[1], (0, 0, 255), 2)
+        # crop to ROI
+        image = self.image[min_y:max_y, min_x:max_x]
 
-            # filter out black contours
-            filtered_contours = []
-            mean_colors = []
-            circularities = []
-            for contour in contours:
+        circularity_threshold = 0.8
+        contours_area_threshold = 100
+        black_color_threshold = 60
 
-                # Calculate area and perimeter of the contour
-                area = cv2.contourArea(contour)
-                perimeter = cv2.arcLength(contour, True)
+        # find the contours
+        # convert the image to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        # apply gaussian blur to the image
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
+        # apply canny edge detection
+        canny = cv2.Canny(blur, 50, 150)
+        # find the contours
+        contours, _ = cv2.findContours(
+            canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-                # filter out small contours
-                if area < contours_area_threshold:
-                    continue
+        # draw a horizontal line in the middle of the image
+        horizontal_line = [(0, image.shape[0] // 2),
+                        (image.shape[1], image.shape[0] // 2)]
+        cv2.line(image, horizontal_line[0], horizontal_line[1], (0, 0, 255), 2)
 
-                # Calculate circularity of the contour (reference: https://en.wikipedia.org/wiki/Roundness)
-                circularity = (4 * np.pi * area) / (perimeter ** 2)
+        # draw a vertical line in the middle of the image
+        vertical_line = [(image.shape[1] // 2, 0),
+                        (image.shape[1] // 2, image.shape[0])]
+        cv2.line(image, vertical_line[0], vertical_line[1], (0, 0, 255), 2)
 
-                # create a mask of the contour
-                n_mask = np.zeros(image.shape[:2], dtype="uint8")
-                cv2.drawContours(n_mask, [contour], 0, (255, 255, 255), -1)
+        # filter out black contours
+        filtered_contours = []
+        mean_colors = []
+        circularities = []
+        for contour in contours:
 
-                # get the mean color of the contour using the mask
-                mean_color = cv2.mean(image, mask=n_mask)
+            # Calculate area and perimeter of the contour
+            area = cv2.contourArea(contour)
+            perimeter = cv2.arcLength(contour, True)
 
-                # filter out non black contours
-                # threshold the circularity value to classify the contour as circular or not
-                if mean_color[0] < black_color_threshold and circularity > circularity_threshold:
-                    filtered_contours.append(contour)
-                    mean_colors.append(mean_color[0])
-                    circularities.append(circularity)
+            # filter out small contours
+            if area < contours_area_threshold:
+                continue
 
-            # print("Number of filtered contours: {}".format(len(filtered_contours)))
+            # Calculate circularity of the contour (reference: https://en.wikipedia.org/wiki/Roundness)
+            circularity = (4 * np.pi * area) / (perimeter ** 2)
 
-            # NOTE: it should only be one contour
-            # draw the filtered contour one by one on the image
-            for i, contour in enumerate(filtered_contours):
-                cv2.drawContours(image, [contour], -1, (255, 0, 0), 3)
+            # create a mask of the contour
+            n_mask = np.zeros(image.shape[:2], dtype="uint8")
+            cv2.drawContours(n_mask, [contour], 0, (255, 255, 255), -1)
 
-                # calculate the centroid of the contour
-                M = cv2.moments(contour)
-                centroid_x = int(M["m10"] / M["m00"])
-                centroid_y = int(M["m01"] / M["m00"])
-                centroid = (centroid_x, centroid_y)
-                cv2.circle(image, centroid, 5, (0, 0, 255), -1)
+            # get the mean color of the contour using the mask
+            mean_color = cv2.mean(image, mask=n_mask)
 
-                # calculate the perpendicular distance between the vertical line and the centroid in the image (y-axis only)
-                self.error = (image.shape[1] // 2) - centroid_x
-                print("Error: {}".format(self.error))
+            # filter out non black contours
+            # threshold the circularity value to classify the contour as circular or not
+            if mean_color[0] < black_color_threshold and circularity > circularity_threshold:
+                filtered_contours.append(contour)
+                mean_colors.append(mean_color[0])
+                circularities.append(circularity)
 
-                # TODO: put a max threshold on error to prevent the arm from moving too much
-                # call the arm motion function
-                if not self.stop:
-                    if abs(self.error) > 2 and abs(self.error) < 300:
-                        if self.error > 0:
-                            self.move_arm_2D_space(1)
-                            rospy.loginfo("Moving arm to the right")
-                        else:
-                            self.move_arm_2D_space(-1)
-                            rospy.loginfo("Moving arm to the left")
-                    else:
-                        self.move_arm_2D_space(0)
-                        continue
-                else:
-                    self.move_arm_2D_space(0)
-                    return True
+        # print("Number of filtered contours: {}".format(len(filtered_contours)))
 
-                # draw the error line on the image from the centroid to the vertical line
-                error_line = [centroid, (centroid_x + self.error, centroid_y)]
-                cv2.line(image, error_line[0], error_line[1], (0, 255, 0), 2)
+        # NOTE: it should only be one contour
+        # draw the filtered contour one by one on the image
+        if len(filtered_contours) == 1:
+            contour = filtered_contours[0]
+            cv2.drawContours(image, [contour], -1, (255, 0, 0), 3)
 
-                # publish the image
-                self.img_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
-                # rospy.loginfo("Published a final image!")
+            # calculate the centroid of the contour
+            M = cv2.moments(contour)
+            centroid_x = int(M["m10"] / M["m00"])
+            centroid_y = int(M["m01"] / M["m00"])
+            centroid = (centroid_x, centroid_y)
+            cv2.circle(image, centroid, 5, (0, 0, 255), -1)
+
+            # calculate the perpendicular distance between the vertical line and the centroid in the image (y-axis only)
+            error_x = target_x - centroid_x
+            error_y = target_y - centroid_y
+            #rospy.loginfo('Centroid: %d, %d, Error: %d, %d' % (centroid_x, centroid_y, error_x, error_y))
+
+            # draw the error line on the image from the centroid to the vertical line
+            error_line = [(target_x, target_y), (target_x + error_x, target_y)]
+            cv2.line(image, error_line[0], error_line[1], (0, 255, 0), 2)
+            error_line = [(target_x, target_y), (target_x, target_y - error_y)]
+            cv2.line(image, error_line[0], error_line[1], (0, 255, 0), 2)
+        else: # if there are no contours, or more than one contour, we fail
+            error_x = None
+            error_y = None
+        self.img_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
+        return error_x, error_y
+
+    def align_red_port(self):
+        min_x = 200
+        max_x = 1000
+        min_y = 100
+        max_y = 520
+        ## These are targets when tool_pose_z = approx 0.148 m
+        target_x = 570
+        target_y = 310
+        color_img = self.image[min_y:max_y, min_x:max_x]
+        img = cv2.cvtColor(color_img, cv2.COLOR_BGR2GRAY)
+        mask = cv2.GaussianBlur(img, (3, 3), sigmaX=33)
+        mask = cv2.adaptiveThreshold(img, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY, 11, 23)
+        mask = erode(mask)
+        mask = dilate(mask)
+        allc, vcirc, hcirc = self.detect_silver_circles(mask)
+        if allc is None:
+            return None, None
+        for idx, cc in enumerate(allc):
+            a, b, r = cc[0], cc[1], cc[2]
+            cv2.circle(color_img, (a, b), r, (0, 0, 255), 2)
+        avg_x = 0
+        avg_y = 0
+        if len(vcirc) == 1:
+            avg_x = (allc[vcirc[0][0]][0] + allc[vcirc[0][1]][0]) / 2.0
+            error_x = target_x - avg_x
+        else:
+            error_x = None
+        if len(hcirc) == 1:
+            avg_y = (allc[hcirc[0][0]][1] + allc[hcirc[0][1]][1]) / 2.0
+            error_y = target_y - avg_y
+        else:
+            error_y = None
+        if error_x is not None:
+            rospy.loginfo('Vcirc Centroid X: %d, %d, Error: %d' % (avg_x, avg_y, error_x))
+        if error_y is not None:
+            rospy.loginfo('Hcirc Centroid Y: %d, %d, Error: %d' % (avg_x, avg_y, error_y))
+
+        for pair in vcirc:
+            cc1 = allc[pair[0]]
+            cc2 = allc[pair[1]]
+            cv2.circle(color_img, (cc1[0], cc1[1]), cc1[2], (255, 0, 0), 2)
+            cv2.circle(color_img, (cc2[0], cc2[1]), cc2[2], (255, 0, 0), 2)
+
+        for pair in hcirc:
+            cc1 = allc[pair[0]]
+            cc2 = allc[pair[1]]
+            cv2.circle(color_img, (cc1[0], cc1[1]), cc1[2], (0, 255, 0), 2)
+            cv2.circle(color_img, (cc2[0], cc2[1]), cc2[2], (0, 255, 0), 2)
+        self.img_pub.publish(self.bridge.cv2_to_imgmsg(color_img, "bgr8"))
+        return error_x, error_y
+
+    def detect_silver_circles(self, img):
+        imgblur = cv2.blur(img, (3, 3))
+        detected_circles = cv2.HoughCircles(imgblur, cv2.HOUGH_GRADIENT, 1, 20, param1 = 50, param2 = 15, minRadius = 10, maxRadius = 20)
+        if detected_circles is None:
+            return None, None, None
+        detected_circles = detected_circles.astype(np.int64)[0]
+        filtered_circles = []
+        wanted_circle_centers = np.array([[535, 268], [531, 164], [324, 342], [218, 343]])
+        circ_centers = detected_circles[:, :2]
+        distances = spatial.distance.cdist(circ_centers, circ_centers)
+        np.fill_diagonal(distances, 1000.0)
+        vertical_circle_idx = []
+        horizontal_circle_idx = []
+        dist_threshold = 10
+        axis_threshold = 5
+        # approximate distance in pixels between silver circles (screws) at 0.148m height
+        target_dist = 104
+        all_circles = detected_circles.copy()
+        selected_circles = []
+        for idx, (cc, dist) in enumerate(zip(detected_circles, distances)):
+            # find circle which is at target_dist from current circle
+            best_match_idx = np.argmin(abs(dist - target_dist))
+            bmc = detected_circles[best_match_idx]
+            smallest = dist[np.argmin(abs(dist - target_dist))]
+            # if its close enough to target_dist and this distance is along the x-coordinate (horizontal circles)
+            if abs(smallest - target_dist) < dist_threshold and (abs(abs(cc[0] - bmc[0]) - target_dist) < axis_threshold):
+                filtered_circles.append(cc)
+                if idx not in selected_circles:
+                    horizontal_circle_idx.append([idx, best_match_idx])
+                    selected_circles.append(best_match_idx)
+            # if its close enough to target_dist and this distance is along the y-coordinate (horizontal circles)
+            if abs(smallest - target_dist) < dist_threshold and (abs(abs(cc[1] - bmc[1]) - target_dist) < axis_threshold):
+                filtered_circles.append(cc)
+                if idx not in selected_circles:
+                    vertical_circle_idx.append([idx, best_match_idx])
+                    selected_circles.append(best_match_idx)
+        detected_circles = np.array(filtered_circles)
+        # if we get two pairs of horizontal circles, pick the one that's above
+        if len(horizontal_circle_idx) == 2:
+            if all_circles[horizontal_circle_idx[0][0]][1] < all_circles[horizontal_circle_idx[1][0]][1]:
+                horizontal_circle_idx.pop(1)
+            else:
+                horizontal_circle_idx.pop(0)
+        return all_circles, vertical_circle_idx, horizontal_circle_idx
 
     def move_down_velocity_control(self):
         linear_vel_z = rospy.get_param("~linear_vel_z", 0.005)
@@ -243,7 +384,47 @@ class PlugRemoveSlidAction(AbstractAction):
         force_control_loop_rate.sleep()
         rospy.sleep(0.1)
         return True
-    
+
+    def move_down_insert(self):
+        linear_vel_z = rospy.get_param("~linear_vel_z", 0.005)
+        force_z_diff_threshold = 6.0
+        force_control_loop_rate = rospy.Rate(rospy.get_param("~force_control_loop_rate", 10.0))
+        stop = False
+        self.current_force_z = []
+        num_retries = 0
+        while not rospy.is_shutdown():
+            if len(self.current_force_z) < 20:
+                num_retries += 1
+                if num_retries > 100:
+                    rospy.logerr("No force measurements received")
+                    break
+                force_control_loop_rate.sleep()
+                continue
+            msg = kortex_driver.msg.TwistCommand()
+            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            msg.twist.linear_z = linear_vel_z
+            # print("Force: {}".format(abs(np.mean(self.current_force_z) - self.current_force_z[-1])))
+            if abs(np.mean(self.current_force_z) - self.current_force_z[-1]) > force_z_diff_threshold:
+                rospy.loginfo("Force difference threshold reached")
+                stop = True
+                msg.twist.linear_z = 0.0
+            self.cart_vel_pub.publish(msg)
+            if stop:
+                break
+            force_control_loop_rate.sleep()
+        self.arm.execute_gripper_command(0.3) #open gripper
+        msg = kortex_driver.msg.TwistCommand()
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        msg.twist.linear_z = -linear_vel_z
+        for idx in range(40):
+            self.cart_vel_pub.publish(msg)
+            force_control_loop_rate.sleep()
+        msg.twist.linear_z = 0.0
+        self.cart_vel_pub.publish(msg)
+        force_control_loop_rate.sleep()
+        rospy.sleep(0.1)
+        return True
+
 
     def move_arm_2D_space(self, direction):
 
@@ -269,7 +450,7 @@ class PlugRemoveSlidAction(AbstractAction):
         pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.20)
         msg = kortex_driver.msg.TwistCommand()
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        for idx in range(40):
+        for idx in range(30):
             msg.twist.linear_z = -0.01
             self.cart_vel_pub.publish(msg)
             self.loop_rate.sleep()
@@ -286,7 +467,7 @@ class PlugRemoveSlidAction(AbstractAction):
             msg.twist.linear_y = 0.01
             self.cart_vel_pub.publish(msg)
             self.loop_rate.sleep()
-        msg.twist.linear_x = 0.0
+        msg.twist.linear_y = 0.0
         self.cart_vel_pub.publish(msg)
         self.loop_rate.sleep()
         self.cart_vel_pub.publish(msg)
