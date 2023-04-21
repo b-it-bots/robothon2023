@@ -19,8 +19,4 @@
         <rosparam command="load" file="$(find robothon2023)/config/wind_cable_poses.yaml"/>
         <remap from="~pose_in" to="$(arg pose_input)" />
     </node>
-    <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="board_link_pub" args="0.450 0.370 0.095 0.0 0.0 0.6883546 -0.7253744 base_link board_link" /> -->
-    <node pkg="tf2_ros" type="static_transform_publisher" name="probe_initial_link_pub" args="0.04 -0.20 0.025 0.0 0.0 0.0 1.0 board_link probe_initial_link" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="door_knob_rotated_pub" args="0.0480 -0.142 0 0 0.0 0 1.0 board_link door_knob_rotated" />
-    <node pkg="tf2_ros" type="static_transform_publisher" name="door_knob_pub" args="0.0480 -0.142 0 0 0.2164396 0 0.976296 board_link door_knob_link" />
 </launch>

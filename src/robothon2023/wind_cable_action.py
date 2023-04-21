@@ -14,6 +14,8 @@ from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
 import cv2
 import numpy as np
+import math
+import datetime
 
 class WindCableAction(AbstractAction):
     def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
@@ -23,7 +25,14 @@ class WindCableAction(AbstractAction):
             '/camera/color/image_raw', Image, self.image_cb)
         self.img_pub = rospy.Publisher(
             '/visual_servoing_debug_img', Image, queue_size=10)
+        self.img_pub_debug_original = rospy.Publisher(
+            '/visual_servoing_debug_img_original', Image, queue_size=10)
+        self.img_pub_debug_contours = rospy.Publisher(
+            '/visual_servoing_debug_img_contours', Image, queue_size=10)
         self.image = None
+        self.loop_rate = rospy.Rate(10)
+        self.bridge = CvBridge()
+        self.cart_vel_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
 
     def pre_perceive(self) -> bool:
         print ("in pre perceive")        
@@ -32,10 +41,38 @@ class WindCableAction(AbstractAction):
 
     def act(self) -> bool:
         # success = self.transform_poses()
-        self.run_visual_servoing(self.detect_wind_cable, run=True)
-        success = self.wind_cable()
 
-        # success = self.test_transform()
+        # go to the plug link
+        msg = PoseStamped()
+        msg.header.frame_id = "wind_cable_link"
+        msg.header.stamp = rospy.Time(0)
+        probe_initial_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True, offset=[0, 0, math.pi/2])
+
+        # convert the probe initial position to a kinova pose
+        probe_initial_pose_kp = get_kinovapose_from_pose_stamped(probe_initial_pose)
+
+        probe_initial_pose_kp.z += 0.05
+
+        # go to the probe initial position
+        success = self.arm.send_cartesian_pose(probe_initial_pose_kp)
+
+        while self.image is None:
+            rospy.logwarn("Waiting for image")
+            rospy.sleep(0.5)
+            
+        self.run_visual_servoing(self.detect_wind_cable, run=True)
+            
+        probe_initial_pose_kp.z -= 0.07
+
+        success = self.arm.send_cartesian_pose(probe_initial_pose_kp)
+
+        if not success:
+            return False
+
+        # close gripper
+        self.arm.execute_gripper_command(0.8)
+
+        success = self.wind_cable()
 
         return success
 
@@ -51,49 +88,6 @@ class WindCableAction(AbstractAction):
         except CvBridgeError as e:
             print(e)
         self.image = image
-    
-    def transform_poses(self):
-
-        wind_cable_poses = []
-        for i in range(1, 11):
-            pose = rospy.get_param("~wind_cable_poses_board/p" + str(i))
-            kp = get_kinovapose_from_list(pose)
-            pose = kp.to_pose_stamped()
-            pose_in_board = self.transform_utils.transformed_pose_with_retries(pose, "board_link")
-            wind_cable_poses.append(pose_in_board)
-        
-        wind_cable_poses2 = []
-        for i in range(1, 11):
-            pose = rospy.get_param("~wind_cable_poses_board2/p" + str(i))
-            kp = get_kinovapose_from_list(pose)
-            pose = kp.to_pose_stamped()
-            pose_in_board = self.transform_utils.transformed_pose_with_retries(pose, "board_link")
-            wind_cable_poses2.append(pose_in_board)
-
-        print('length of wind_cable_poses: ', len(wind_cable_poses))
-        print('length of wind_cable_poses2: ', len(wind_cable_poses2))
-
-        # get relative path to the config folder
-        config_path = os.path.join(os.path.dirname(__file__), '../..', 'config')
-
-        # write the poses to a yaml file
-        with open(config_path+"/wind_cable_poses.yaml", "w+") as f:
-            f.write("wind_cable_poses:\n")
-            for i in range(1, 11):
-                print('i: ', i)
-                p: PoseStamped = wind_cable_poses[i-1]
-                # convert orientation to euler angles using tf
-                euler = tf.transformations.euler_from_quaternion([p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])
-                f.write(f"  p{str(i)} : [{p.pose.position.x}, {p.pose.position.y}, {p.pose.position.z}, {euler[0]}, {euler[1]}, {euler[2]}]\n")
-            f.write("wind_cable_poses2:\n")
-            for i in range(1, 11):
-                print('i: ', i)
-                p: PoseStamped = wind_cable_poses2[i-1]
-                # convert orientation to euler angles using tf
-                euler = tf.transformations.euler_from_quaternion([p.pose.orientation.x, p.pose.orientation.y, p.pose.orientation.z, p.pose.orientation.w])
-                f.write(f"  p{str(i)} : [{p.pose.position.x}, {p.pose.position.y}, {p.pose.position.z}, {euler[0]}, {euler[1]}, {euler[2]}]\n")
-
-        return True
     
     def wind_cable(self) -> bool:
         
@@ -120,17 +114,12 @@ class WindCableAction(AbstractAction):
 
             wind_cable_kinova_poses.append(kp)
 
-        success = self.arm.send_cartesian_pose(wind_cable_kinova_poses[0])
-
-        # close gripper
-        self.arm.execute_gripper_command(0.8)
-
         success = self.arm.traverse_waypoints(wind_cable_kinova_poses)
 
         print('first round done')
 
         wind_cable_kinova_poses2 = []
-        for i in range(1, 11):
+        for i in range(1, 12):
             pose = rospy.get_param("~wind_cable_poses2/p" + str(i))
 
             # convert the euler angles to quaternion
@@ -158,6 +147,8 @@ class WindCableAction(AbstractAction):
 
         # go out of the way to keep the probe safe
         # TODO: figure out which way to go
+
+        return success
     
     def run_visual_servoing(self, vs_target_fn, run=True):
         stop = False
@@ -168,7 +159,7 @@ class WindCableAction(AbstractAction):
                 continue
             msg = kortex_driver.msg.TwistCommand()
             msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-            x_error, y_error = vs_target_fn()
+            x_error, y_error = vs_target_fn(True)
             if x_error is None:
                 print('none')
                 msg.twist.linear_x = 0.0
@@ -205,14 +196,17 @@ class WindCableAction(AbstractAction):
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
         self.cart_vel_pub.publish(msg)
 
-    def detect_wind_cable(self) -> tuple(float, float):
+    def detect_wind_cable(self, save_image=False):
+
+        if save_image:
+            self.save_debug_image()
 
         # parameters
         image_idx = 7  # works for index 0, 7, 9
         circularity_threshold_min = 0.1
-        circularity_threshold_max = 0.5
-        contours_area_threshold_min = 5000
-        contours_area_threshold_max = 8000
+        circularity_threshold_max = 0.7
+        contours_area_threshold_min = 3000
+        contours_area_threshold_max = 19000
         black_color_threshold = 60
 
         # draw a rectangle on the image from the center of the image
@@ -244,6 +238,13 @@ class WindCableAction(AbstractAction):
         # find the contours
         contours, _ = cv2.findContours(
             canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        
+        # draw the contours on the image
+        cv2.drawContours(roi_copy, contours, -1, (0, 255, 0), 2)
+
+        # cv2.imshow("Contours", roi_copy)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
 
         # filter out black contours
         filtered_contours = []
@@ -269,10 +270,16 @@ class WindCableAction(AbstractAction):
 
             if circularity < circularity_threshold_min or circularity > circularity_threshold_max:
                 continue
+            
+            # draw contours on the image
+            cv2.drawContours(roi_copy_2, [contour], -1, (0, 255, 0), 2)
+            # cv2.imshow("Contours", roi_copy_2)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
 
             filtered_contours.append(contour)
 
-        # print("Number of filtered contours: {}".format(len(filtered_contours)))
+        print("Number of filtered contours: {}".format(len(filtered_contours)))
 
         # draw a horizontal line in the middle of the image
         horizontal_line = [(0, roi_copy_2.shape[0] // 2),
@@ -282,7 +289,7 @@ class WindCableAction(AbstractAction):
         # draw a vertical line in the middle of the image
         vertical_line = [(roi_copy_2.shape[1] // 2, 0),
                         (roi_copy_2.shape[1] // 2, roi_copy_2.shape[0])]
-        cv2.line(roi_copy_2, vertical_line[0], vertical_line[1], (0, 0, 255), 2)
+        cv2.line(roi_copy_2, vertical_line[ 0], vertical_line[1], (0, 0, 255), 2)
 
         # NOTE: it should only be one contour
         if len(filtered_contours) > 1:
@@ -310,10 +317,21 @@ class WindCableAction(AbstractAction):
 
             # draw the error line on the image from the centroid to the vertical line
             error_line = [bottom_most_point, (roi.shape[1] // 2, bottom_most_point[1])]
-            cv2.line(roi_copy_2, error_line[0], error_line[1], (0, 255, 0), 2)
+            cv2.line(roi_copy_2, error_line[0], error_line[1], (255, 0, 0), 2)
+
+            self.img_pub.publish(self.bridge.cv2_to_imgmsg(roi_copy_2, "bgr8"))
 
             return (error, None)
 
         else:
             print("No contour found!")
             return (None, None)
+        
+    def save_debug_image(self):
+        config_path = os.path.join(os.path.dirname(__file__), '../..', 'images')
+        
+        # get the current date and time
+        now = datetime.datetime.now()
+
+        if self.image is not None:
+            cv2.imwrite(os.path.join(config_path, 'debug_image_{}.png'.format(now)), self.image)
