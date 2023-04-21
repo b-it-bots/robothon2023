@@ -23,6 +23,7 @@ from kortex_driver.msg import *
 import actionlib
 from geometry_msgs.msg import PoseStamped
 from utils.kinova_pose import KinovaPose
+from utils.force_measure import ForceMeasurmement
 
 from typing import List
 
@@ -37,6 +38,9 @@ class FullArmMovement:
         self.is_gripper_present = rospy.get_param("/" + self.robot_name + "/is_gripper_present", False)
 
         rospy.loginfo("Using robot_name " + self.robot_name + " , robot has " + str(self.degrees_of_freedom) + " degrees of freedom and is_gripper_present is " + str(self.is_gripper_present))
+
+        # initialize force measurment
+        self.fm = ForceMeasurmement()
 
         # Init the action topic subscriber
         self.action_topic_sub = rospy.Subscriber("/" + self.robot_name + "/action_topic", ActionNotification, self.cb_action_topic)
@@ -78,6 +82,9 @@ class FullArmMovement:
         apply_emergency_stop = '/' + self.robot_name + '/base/apply_emergency_stop'
         rospy.wait_for_service(apply_emergency_stop)
         self.apply_E_STOP = rospy.ServiceProxy(apply_emergency_stop, ApplyEmergencyStop)
+
+        # cartesian velocity publislher
+        self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
 
     def cb_action_topic(self, notif):
         self.last_action_notif_type = notif.action_event
@@ -419,6 +426,100 @@ class FullArmMovement:
                 break
             time.sleep(0.01)
         return success
+    
+    def stop_arm_velocity(self):
+        """
+        Stop arm by sending zero velocity
+        """
+
+        velocity_vector = TwistCommand()
+        velocity_vector.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED # for proper joypad control
+        self.cartesian_velocity_pub.publish(velocity_vector)
+        return True
+    
+    def move_down_with_caution(self, distance=0.05, time=6, velocity=None, force_threshold=[4,4,4], ref_frame=CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL):
+        """
+        Move the arm with caution using velocity and force monitoring
+
+        distance: distance to move in meters
+        time: time to move in seconds
+        velocity: velocity to move in m/s (overrides distance and time)
+        force_threshold: force threshold in [N, N, N] to stop the arm
+        ref_frame: reference frame for the velocity command (default is tool frame)
+        """
+
+        rate_loop = rospy.Rate(10)
+        self.fm.set_force_threshold(force=force_threshold) # force in z increases to 4N when it is in contact with the board
+
+        # enable force monitoring
+        self.fm.enable_monitoring()
+        
+        # calculate velocity
+        if velocity is None:
+            velocity = distance/time
+
+        # create twist command to move towards the slider
+        approach_twist = TwistCommand()
+        approach_twist.reference_frame = ref_frame
+        approach_twist.twist.linear_z = velocity
+
+        while not self.fm.force_limit_flag and not rospy.is_shutdown(): 
+            # check for force limit flag and stop if it is true
+            # check for the z axis of the tooltip and stop if it is less than 0.111(m) (the z axis of the slider) from base frame
+
+            if self.fm.force_limit_flag:
+                break
+            self.cartesian_velocity_pub.publish(approach_twist)
+            rate_loop.sleep()
+
+        success = self.stop_arm_velocity()
+        if not success:
+            return False
+        
+        self.fm.disable_monitoring()
+
+        distance = 0.008 ; time = 1 # move back 8 mm
+        velocity = distance/time
+
+        retract_twist = TwistCommand()
+        retract_twist.reference_frame = ref_frame
+        retract_twist.twist.linear_z = -velocity
+        if self.fm.force_limit_flag:
+            self.cartesian_velocity_pub.publish(retract_twist)
+            rospy.sleep(time)
+        
+        self.stop_arm_velocity()
+        return True
+    
+    def move_with_velocity(self, distance, time, direction, velocity=None, ref_frame=CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL):
+        """
+        Move the arm with velocity in a given direction
+
+        distance: distance to move in m
+        time: time to move in s
+        direction: direction to move in ('x', 'y', 'z')
+        velocity: velocity to move in m/s (overrides distance and time)
+        ref_frame: reference frame to move in (Tool, Base): default is Tool
+        """
+
+        if velocity is None:
+            velocity = distance/time
+
+        # create twist command to move towards the slider
+        approach_twist = TwistCommand()
+        approach_twist.reference_frame = ref_frame
+        if direction == 'x':
+            approach_twist.twist.linear_x = velocity
+        elif direction == 'y':
+            approach_twist.twist.linear_y = velocity
+        elif direction == 'z':
+            approach_twist.twist.linear_z = velocity
+
+        self.cartesian_velocity_pub.publish(approach_twist)
+        rospy.sleep(time)
+        self.stop_arm_velocity()
+
+        return True
 
     def main(self):
         # For testing purposes
