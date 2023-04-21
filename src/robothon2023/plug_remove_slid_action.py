@@ -51,6 +51,7 @@ class PlugRemoveSlidAction(AbstractAction):
     def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
         super(PlugRemoveSlidAction, self).__init__(arm, transform_utils)
         self.current_force_z = []
+        self.current_height = None
         self.base_feedback_sub = rospy.Subscriber('/my_gen3/base_feedback', kortex_driver.msg.BaseCyclic_Feedback, self.base_feedback_cb)
         self.cart_vel_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
         self.img_sub = rospy.Subscriber('/camera/color/image_raw', Image, self.image_cb)
@@ -66,6 +67,7 @@ class PlugRemoveSlidAction(AbstractAction):
         self.current_force_z.append(msg.base.tool_external_wrench_force_z)
         if len(self.current_force_z) > 25:
             self.current_force_z.pop(0)
+        self.current_height = msg.base.tool_pose_z
 
     def pre_perceive(self) -> bool:
         print ("in pre perceive")
@@ -89,8 +91,14 @@ class PlugRemoveSlidAction(AbstractAction):
         self.arm.execute_gripper_command(0.9) #close gripper
         self.move_up_velocity_control()
         self.move_forward()
-        self.run_visual_servoing(self.align_red_port, run=True)
-        self.move_down_insert()
+        inserted = False
+        retries = 0
+        while not inserted:
+            self.run_visual_servoing(self.align_red_port, run=True)
+            inserted = self.move_down_insert()
+            retries += 1
+            if retries > 5:
+                break
         return True
 
     def verify(self) -> bool:
@@ -387,7 +395,7 @@ class PlugRemoveSlidAction(AbstractAction):
 
     def move_down_insert(self):
         linear_vel_z = rospy.get_param("~linear_vel_z", 0.005)
-        force_z_diff_threshold = 6.0
+        force_z_diff_threshold = 10.0
         force_control_loop_rate = rospy.Rate(rospy.get_param("~force_control_loop_rate", 10.0))
         stop = False
         self.current_force_z = []
@@ -412,18 +420,23 @@ class PlugRemoveSlidAction(AbstractAction):
             if stop:
                 break
             force_control_loop_rate.sleep()
-        self.arm.execute_gripper_command(0.3) #open gripper
+        inserted_plug = False
+        if self.current_height < 0.120: # we've definitely inserted the plug
+            inserted_plug = True
+            self.arm.execute_gripper_command(0.3) #open gripper
         msg = kortex_driver.msg.TwistCommand()
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
         msg.twist.linear_z = -linear_vel_z
-        for idx in range(40):
+        for idx in range(50):
+            if self.current_height > 0.1475:
+                break
             self.cart_vel_pub.publish(msg)
             force_control_loop_rate.sleep()
         msg.twist.linear_z = 0.0
         self.cart_vel_pub.publish(msg)
         force_control_loop_rate.sleep()
         rospy.sleep(0.1)
-        return True
+        return inserted_plug
 
 
     def move_arm_2D_space(self, direction):
@@ -450,7 +463,9 @@ class PlugRemoveSlidAction(AbstractAction):
         pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.20)
         msg = kortex_driver.msg.TwistCommand()
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        for idx in range(30):
+        for idx in range(50):
+            if self.current_height > 0.1475:
+                break
             msg.twist.linear_z = -0.01
             self.cart_vel_pub.publish(msg)
             self.loop_rate.sleep()
