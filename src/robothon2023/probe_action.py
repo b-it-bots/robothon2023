@@ -315,7 +315,48 @@ class ProbeAction(AbstractAction):
             return False
         
 
+        # close the gripper
+        success = self.arm.execute_gripper_command(0.75) # 0.75 closed 
+        if not success:
+            rospy.logerr("Failed to open the gripper")
+            return False
+        
+
         # linear_vel_z = 0.0025
+        vel = 0.01
+        arc_radius = 0.07
+        angle = 45
+        angular_velocity = vel/arc_radius
+
+        angular_velocity *= 0.05 # 20% of the linear velocity
+        # angle = 25.0
+        # # w.r.t board link
+        # linear_vel_x = vel*math.cos(math.radians(angle))
+        # linear_vel_z = vel*math.sin(math.radians(angle))
+
+
+        door_open_twist = kortex_driver.msg.TwistCommand()
+        door_open_twist.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        # twist_base.linear.z = linear_vel_z
+        # angular_vel_x = -0.02
+
+
+        linear_velocity_y = -abs(vel*math.cos(math.degrees(angle)))
+        linear_velocity_z = -abs(vel*math.sin(math.degrees(angle)))
+        angular_velocity_x = angular_velocity
+
+        linear_velocity_y *= 0.9
+        linear_velocity_z *= 1.1
+
+        for t in range(5):
+            
+            print("time==>: ", t, "s")
+
+            door_open_twist.twist.linear_y = linear_velocity_y
+            door_open_twist.twist.linear_z = linear_velocity_z
+            door_open_twist.twist.angular_x = -abs(angular_velocity_x)
+
+            self.cart_vel_pub.publish(door_open_twist)
         vel = 0.01
         arc_radius = 0.07
         angle = 45
@@ -355,6 +396,10 @@ class ProbeAction(AbstractAction):
             print("linear_velocity_z: ", linear_velocity_z)
             print("angular_velocity_x: ", angular_velocity_x)
             rospy.sleep(0.5)
+            print("linear_velocity_y: ", linear_velocity_y)
+            print("linear_velocity_z: ", linear_velocity_z)
+            print("angular_velocity_x: ", angular_velocity_x)
+            rospy.sleep(0.5)
 
         msg = kortex_driver.msg.TwistCommand()
 
@@ -369,6 +414,10 @@ class ProbeAction(AbstractAction):
 
         self.arm.clear_faults()
         self.arm.subscribe_to_a_robot_notification()
+    
+
+#### door opening without magnet
+
     
 
 #### door opening without magnet
@@ -421,18 +470,29 @@ class ProbeAction(AbstractAction):
         msg = PoseStamped()
         msg.header.frame_id = "door_knob_link"
         msg.header.stamp = rospy.Time(0)
+        msg = PoseStamped()
+        msg.header.frame_id = "door_knob_link"
+        msg.header.stamp = rospy.Time(0)
 
         msg.pose.position.x -= 0.075
         msg.pose.position.z += 0.30
+        msg.pose.position.x -= 0.075
+        msg.pose.position.z += 0.30
 
+        door_knob_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True)
         door_knob_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True)
 
         print("Door knob pose:  ")
         print(door_knob_pose)
         self.door_knob_pose_pub.publish(door_knob_pose)
+        print("Door knob pose:  ")
+        print(door_knob_pose)
+        self.door_knob_pose_pub.publish(door_knob_pose)
 
         rospy.sleep(5)
+        rospy.sleep(5)
 
+        success = self.arm.execute_gripper_command(1.0)
         success = self.arm.execute_gripper_command(1.0)
 
         if not success:
