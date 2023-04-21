@@ -7,3 +7,5 @@ board_to_meter_plug_black: [0.0, -0.058, 0]
 board_to_meter_plug_red: [0.025, -0.058, 0]
 board_to_door_knob: [0.01, -0.142, 0]
 board_to_gui: [0.06, 0, 0]
+board_to_probe_initial: [0.04, -0.20, 0]
+board_to_wind_cable: [-0.10, -0.058, 0] # for grasping the wind cable
