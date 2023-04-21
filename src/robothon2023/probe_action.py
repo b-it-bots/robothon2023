@@ -41,12 +41,12 @@ class ProbeAction(AbstractAction):
         #     rospy.logerr("[probe_action] Failed to place the probe in the holder")
         #     return False
         
-        # # open the door with magnet
-        # success = self.open_door()
+        # open the door with magnet
+        success = self.open_door()
 
-        # if not success:
-        #     rospy.logerr("[probe_action] Failed to open the door")
-        #     return False
+        if not success:
+            rospy.logerr("[probe_action] Failed to open the door")
+            return False
         
         # pick the probe from the holder
         # success = self.pick_probe_from_holder()
@@ -297,17 +297,25 @@ class ProbeAction(AbstractAction):
         print("[probe_action] door knob pose: {}".format(door_knob_kinova_pose))
 
         success = self.arm.send_cartesian_pose(door_knob_kinova_pose)
-
-        # velocity mode to approach the door knob
-
-        self.arm.
+        # return False
+        rospy.sleep(1.0) # wait for the arm to settle for proper force sensing
 
         if not success:
             rospy.logerr("Failed to move to the door knob position")
             return False
-        
+
+
+
+        # velocity mode to approach the door knob
+        success = self.arm.move_down_with_caution(velocity=0.01, force_threshold=[4,4,2.0])
+
+        if not success:
+            rospy.logerr("Failed to move down the arm")
+            return False
         print("[probe_action] reached door knob position")
 
+
+
         # close the gripper
         success = self.arm.execute_gripper_command(0.75) # 0.75 closed 
         if not success:
@@ -315,91 +323,92 @@ class ProbeAction(AbstractAction):
             return False
         
 
-        # close the gripper
-        success = self.arm.execute_gripper_command(0.75) # 0.75 closed 
-        if not success:
-            rospy.logerr("Failed to open the gripper")
-            return False
-        
+        # # linear_vel_z = 0.0025
+        # vel = 0.01
+        # arc_radius = 0.07
+        # angle = 45
+        # angular_velocity = vel/arc_radius
 
-        # linear_vel_z = 0.0025
-        vel = 0.01
-        arc_radius = 0.07
-        angle = 45
-        angular_velocity = vel/arc_radius
-
-        angular_velocity *= 0.05 # 20% of the linear velocity
-        # angle = 25.0
-        # # w.r.t board link
-        # linear_vel_x = vel*math.cos(math.radians(angle))
-        # linear_vel_z = vel*math.sin(math.radians(angle))
+        # angular_velocity *= 0.05 # 20% of the linear velocity
+        # # angle = 25.0
+        # # # w.r.t board link
+        # # linear_vel_x = vel*math.cos(math.radians(angle))
+        # # linear_vel_z = vel*math.sin(math.radians(angle))
 
 
         door_open_twist = kortex_driver.msg.TwistCommand()
         door_open_twist.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        # twist_base.linear.z = linear_vel_z
-        # angular_vel_x = -0.02
 
 
-        linear_velocity_y = -abs(vel*math.cos(math.degrees(angle)))
-        linear_velocity_z = -abs(vel*math.sin(math.degrees(angle)))
-        angular_velocity_x = angular_velocity
+        # linear_velocity_x = abs(vel*math.cos(math.degrees(angle)))
+        # linear_velocity_z = abs(vel*math.sin(math.degrees(angle)))
+        # angular_velocity_y = abs(angular_velocity)
 
-        linear_velocity_y *= 0.9
-        linear_velocity_z *= 1.1
+        # linear_velocity_x *= 0.95
+        # linear_velocity_z *= 1.1
 
-        for t in range(5):
+        # switch = -1
+        # kill_z = 0
+
+        angle = 0
+
+        radius = 0.07
+        arc_length = (2 * math.pi * radius) /4
+        travel_time = 1
+        angular_velocity_door = arc_length / travel_time
+        # angular_velocity_door *= 10
+        travel_time = 15
+
+        prev_theta = 0
+
+        for t in range(travel_time):
             
             print("time==>: ", t, "s")
+            angle_feedback = np.rad2deg(angular_velocity_door * t)
 
-            door_open_twist.twist.linear_y = linear_velocity_y
-            door_open_twist.twist.linear_z = linear_velocity_z
-            door_open_twist.twist.angular_x = -abs(angular_velocity_x)
+            print("angluar velocity of the door : ", angular_velocity_door, "rad/s")
+            print("angle_feedback of the motion : ", angle_feedback)
+            angle = np.deg2rad(angle_feedback)
 
-            self.cart_vel_pub.publish(door_open_twist)
-        vel = 0.01
-        arc_radius = 0.07
-        angle = 45
-        angular_velocity = vel/arc_radius
+            # angular roataion calculation
+            z = radius * math.cos(angle)
+            y = radius * math.sin(angle)
 
-        angular_velocity *= 0.05 # 20% of the linear velocity
-        # angle = 25.0
-        # # w.r.t board link
-        # linear_vel_x = vel*math.cos(math.radians(angle))
-        # linear_vel_z = vel*math.sin(math.radians(angle))
+            theta = np.arctan2(z, y)
+            print("theta of perpendicular vector: ", theta)
+            current_theta = theta
 
+            #find the rate of change of theta
+            d_theta = current_theta - prev_theta
+            prev_theta = current_theta
+            print("rate of change in angle: ", d_theta)
 
-        door_open_twist = kortex_driver.msg.TwistCommand()
-        door_open_twist.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        # twist_base.linear.z = linear_vel_z
-        # angular_vel_x = -0.02
+            #angular velocity in x calculation
+            angular_velocity_x = d_theta /4
 
+            # update step
+            linear_velocity_z = radius * angular_velocity_door * math.cos(angle)
+            linear_velocity_y = radius * angular_velocity_door * math.sin(angle) + (radius * (angular_velocity_door)**2)
 
-        linear_velocity_y = -abs(vel*math.cos(math.degrees(angle)))
-        linear_velocity_z = -abs(vel*math.sin(math.degrees(angle)))
-        angular_velocity_x = angular_velocity
-
-        linear_velocity_y *= 0.9
-        linear_velocity_z *= 1.1
-
-        for t in range(5):
+            #conditions 
+            if t == 0:
+                angular_velocity_x = 0
             
-            print("time==>: ", t, "s")
+            print("++++++++++++++++++++++++++++++")
+            # printing step 
+            print("linear_velocity_y: ", linear_velocity_y, "m/s")
+            print("linear_velocity_z: ", linear_velocity_z, "m/s")
+            print("angular_velocity_x: ", angular_velocity_x, "rad/s")
+            
+            print("++++++++++++++++++++++++++++++"+"\n")
 
-            door_open_twist.twist.linear_y = linear_velocity_y
-            door_open_twist.twist.linear_z = linear_velocity_z
-            door_open_twist.twist.angular_x = -abs(angular_velocity_x)
-
+            # publishing step
+            door_open_twist.twist.linear_y = -linear_velocity_y
+            door_open_twist.twist.linear_z = -linear_velocity_z 
+            door_open_twist.twist.angular_x = angular_velocity_x
             self.cart_vel_pub.publish(door_open_twist)
 
-            print("linear_velocity_y: ", linear_velocity_y)
-            print("linear_velocity_z: ", linear_velocity_z)
-            print("angular_velocity_x: ", angular_velocity_x)
-            rospy.sleep(0.5)
-            print("linear_velocity_y: ", linear_velocity_y)
-            print("linear_velocity_z: ", linear_velocity_z)
-            print("angular_velocity_x: ", angular_velocity_x)
-            rospy.sleep(0.5)
+            rospy.sleep(1)
 
         msg = kortex_driver.msg.TwistCommand()
 
@@ -414,11 +423,6 @@ class ProbeAction(AbstractAction):
 
         self.arm.clear_faults()
         self.arm.subscribe_to_a_robot_notification()
-    
-
-#### door opening without magnet
-
-    
 
 #### door opening without magnet
 
