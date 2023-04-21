@@ -19,8 +19,6 @@ import numpy as np
 from kortex_driver.srv import *
 from kortex_driver.msg import *
 
-from robothon2023.full_arm_movement import FullArmMovement
-
 class ForceMeasurmement:
 
     def __init__(self, force_threshold: list = [10,10, 10], topic_name: String = "None"):
@@ -33,8 +31,6 @@ class ForceMeasurmement:
         self._force_threshold = force_threshold 
         self.monitoring = False
         self.force_limit_flag = False
-
-        self.fam = FullArmMovement()
 
     def _force_callback(self, msg):
 
@@ -116,8 +112,8 @@ class ForceMeasurmement:
         if data[0] == 1 or data[1] == 1 or data[2] == 1:
             self.set_force_limit_flag()
             # pass
-        if force_dict["x"] > 20 or force_dict["y"] > 20 or force_dict["z"] > 20:
-            self.fam.apply_E_STOP()
+        # if force_dict["x"] > 20 or force_dict["y"] > 20 or force_dict["z"] > 20:
+        #     self.fam.apply_E_STOP()
 
     
     # Returns the force measured by the robot
@@ -143,6 +139,8 @@ class ForceMeasurmement:
             
         self.force_limit_flag = False
         return True 
+    
+    
 
 
 if __name__ == "__main__":
