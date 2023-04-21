@@ -87,7 +87,14 @@ class SliderAction(AbstractAction):
         return True
 
     def do(self) -> bool:
-        return self.act()
+
+        success = True
+        
+        success &= self.pre_perceive()
+        success &= self.act()
+        success &= self.verify()
+
+        return success
 
 
     def tooltip_pose_callback(self, msg):
@@ -189,7 +196,7 @@ class SliderAction(AbstractAction):
         rate_loop = rospy.Rate(10)
 
         self.fm.reset_force_limit_flag()
-        self.fm.set_force_threshold(force=[2.3,4,4]) 
+        self.fm.set_force_threshold(force=[4.0,4.0,4.0]) 
         self.fm.enable_monitoring() 
 
         # stop the while loop after 3 seconds
