@@ -7,16 +7,16 @@ from robothon2023.transform_utils import TransformUtils
 from kortex_driver.srv import *
 from kortex_driver.msg import *
 
-from robothon2023.probe_action import ProbeAction
+from robothon2023.wind_cable_action import WindCableAction
 
-class ProbeTest(object):
+class WindCable(object):
 
     """Probe test using full arm movement"""
 
     def __init__(self):
         self.fam = FullArmMovement()
         self.transform_utils = TransformUtils()
-        self.probe_action = ProbeAction(self.fam, self.transform_utils)
+        self.wind_cable = WindCableAction(self.fam, self.transform_utils)
         self.joint_angles = rospy.get_param("~joint_angles", None)
         self.setup_arm_for_pick()
 
@@ -31,13 +31,11 @@ class ProbeTest(object):
         self.fam.execute_gripper_command(0.0) #Open the gripper
 
     def test(self):
-        if self.probe_action.do():
+        if self.wind_cable.do():
             return True
 
 
 if __name__ == "__main__":
     rospy.init_node('probe_test')
-    PT =  ProbeTest()
-    PT.test()
-    rospy.spin()
-    exit(0)
+    WC =  WindCable()
+    WC.test()

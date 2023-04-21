@@ -88,7 +88,7 @@ class FullArmMovement:
         each waypoint is a list of 6 floats: [x, y, z, roll, pitch, yaw].\n
         angles are in degrees.
         '''
-
+        self.last_action_notif_type = None
         # move the arm through the waypoints
 
         req = ExecuteActionRequest()

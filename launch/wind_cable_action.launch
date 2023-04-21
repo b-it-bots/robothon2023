@@ -11,11 +11,12 @@
         <param name="robot_name" value="$(arg robot_name)"/>
     </node -->
 
-    <node pkg="robothon2023" type="probe_test.py" name="probe_test" output="screen">
+    <node pkg="robothon2023" type="wind_cable_test.py" name="wind_cable_test" output="screen">
         <rosparam command="load" file="$(find robothon2023)/config/joint_angles.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/boundary_safety.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/task_params.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/trajectories.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/wind_cable_poses.yaml"/>
         <remap from="~pose_in" to="$(arg pose_input)" />
     </node>
     <!-- <node pkg="tf2_ros" type="static_transform_publisher" name="board_link_pub" args="0.450 0.370 0.095 0.0 0.0 0.6883546 -0.7253744 base_link board_link" /> -->
