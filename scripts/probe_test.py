@@ -39,5 +39,3 @@ if __name__ == "__main__":
     rospy.init_node('probe_test')
     PT =  ProbeTest()
     PT.test()
-    rospy.spin()
-    exit(0)
