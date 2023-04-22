@@ -9,7 +9,7 @@ from sensor_msgs.msg import Image
 from robothon2023.full_arm_movement import FullArmMovement
 from robothon2023.transform_utils import TransformUtils
 from utils.kinova_pose import KinovaPose, get_kinovapose_from_list, get_kinovapose_from_pose_stamped
-from utils.perception_utils import dilate, erode, get_uppermost_contour
+from utils.perception_utils import dilate, erode, get_uppermost_contour, detect_door_circle
 
 from kortex_driver.srv import *
 from kortex_driver.msg import *
@@ -90,7 +90,7 @@ class ProbeAction(AbstractAction):
         probed = False
         retries = 0
         while not probed:
-            self.run_visual_servoing()
+            self.run_visual_servoing(self.get_probe_point_error, target_height=0.3)
             probed = self.move_down_and_probe()
             retries += 1
             if retries > 5:
@@ -529,6 +529,9 @@ class ProbeAction(AbstractAction):
             rospy.logerr("Failed to move to the door knob position")
             return False
 
+        rospy.loginfo("Visual servoing to door knob")
+        self.run_visual_servoing(self.get_door_knob_error, target_height = 0.11)
+
         # velocity mode to approach the door knob
         success = self.arm.move_down_with_caution(velocity=0.01, force_threshold=[4,4,2.0])
 
@@ -758,7 +761,43 @@ class ProbeAction(AbstractAction):
             self.probe_cable_dir_debug_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
 
         return angle
-    
+
+    def get_door_knob_error(self):
+        '''
+        Get error for aligning with door knob using visual servoing
+        '''
+        min_x = 280
+        max_x = 1000
+        min_y = 400
+        max_y = 720
+        # at height 0.11
+        target_x = 362
+        target_y = 299
+        image = self.image[min_y:max_y, min_x:max_x]
+
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        gray = cv2.GaussianBlur(gray, (3, 3), 0)
+        gray = cv2.Canny(gray, 80, 200)
+        gray = dilate(gray)
+        gray = erode(gray)
+        circles = detect_door_circle(gray)
+        if circles is not None:
+            if len(circles) > 1:
+                return None, None
+            elif len(circles) == 1:
+                cc = circles[0]
+                cx, cy, r = cc[0], cc[1], cc[2]
+                # Draw the circumference of the circle.
+                cv2.circle(image, (cx, cy), r, (0, 255, 0), 2)
+                error_x = target_x - cx
+                error_y = target_y - cy
+        else:
+            error_x = None
+            error_y = None
+        cv2.imshow("image", image)
+        cv2.waitKey(1)
+        return error_x, error_y
+
 
     def get_orange_mask(self, img):
         lower = np.array([80, 120, 140])
@@ -769,6 +808,9 @@ class ProbeAction(AbstractAction):
         return mask
 
     def get_probe_point_error(self):
+        '''
+        Get error for circuit probe point for visual servoing
+        '''
         ## set at height of 0.3 m (i.e tool_pose_z = 0.3)
         target_x = 634
         target_y = 464
@@ -790,12 +832,12 @@ class ProbeAction(AbstractAction):
         error_y = target_y - (cy + start_y)
         return error_x, error_y
 
-    def run_visual_servoing(self):
+    def run_visual_servoing(self, vs_target_fn, target_height):
         success = False
         rospy.loginfo("Moving to correct height")
         while not rospy.is_shutdown():
             # we need to be at 0.3 height to do VS
-            height_error = self.current_height - 0.3
+            height_error = self.current_height - target_height
             msg = kortex_driver.msg.TwistCommand()
             msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
             if height_error > 0.001:
@@ -815,7 +857,7 @@ class ProbeAction(AbstractAction):
                 continue
             msg = kortex_driver.msg.TwistCommand()
             msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-            error_x, error_y = self.get_probe_point_error()
+            error_x, error_y = vs_target_fn()
             if error_x is None:
                 msg.twist.linear_x = 0.0
             else:
@@ -841,8 +883,16 @@ class ProbeAction(AbstractAction):
             if msg.twist.linear_x == 0.0 and msg.twist.linear_y == 0 and error_x is not None:
                 break
             self.loop_rate.sleep()
+        msg = kortex_driver.msg.TwistCommand()
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
+        msg.twist.linear_x = 0.0
+        msg.twist.linear_y = 0.0
+        self.cart_vel_pub.publish(msg)
 
     def move_down_and_probe(self):
+        '''
+        Once we have aligned with the probe circuit point, go down
+        '''
         #### Go down fast
         self.current_force_z = []
         stop = False
