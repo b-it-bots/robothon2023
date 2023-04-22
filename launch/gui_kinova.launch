@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+
+<launch>
+    <!-- Robot namespace -->
+
+    <!-- Launch the example in that namespace -->
+    <!-- node name="full_arm_movement_python" pkg="robothon2023" type="full_arm_movement.py" output="screen" launch-prefix="bash -c 'sleep $(arg start_delay_seconds); $0 $@' ">
+        <param name="robot_name" value="$(arg robot_name)"/>
+    </node -->
+
+    <node pkg="robothon2023" type="gui_kinova.py" name="gui_kinova" output="screen">
+        <rosparam command="load" file="$(find robothon2023)/config/joint_angles.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/boundary_safety.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/task_params.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/trajectories.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/wind_cable_poses.yaml"/>
+    </node>
+
+</launch>
