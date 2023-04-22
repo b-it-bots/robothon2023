@@ -37,9 +37,10 @@ class PointsOfInterestPublisher(object):
         board_to_gui = rospy.get_param("~board_to_gui")
         board_to_probe_initial = rospy.get_param("~board_to_probe_initial")
         board_to_wind_cable = rospy.get_param("~board_to_wind_cable")
+        board_to_probe_point = rospy.get_param("~board_to_probe_point")
 
-        self.all_transforms = [board_to_blue_button, board_to_red_button, board_to_slider_start, board_to_slider_end, board_to_meter_plug_black, board_to_meter_plug_red, board_to_door_knob, board_to_gui, board_to_wind_cable]
-        self.all_link_names = ['blue_button', 'red_button', 'slider_start', 'slider_end', 'meter_plug_black', 'meter_plug_red', 'door_knob', 'gui', 'wind_cable']
+        self.all_transforms = [board_to_blue_button, board_to_red_button, board_to_slider_start, board_to_slider_end, board_to_meter_plug_black, board_to_meter_plug_red, board_to_door_knob, board_to_gui, board_to_wind_cable, board_to_probe_point]
+        self.all_link_names = ['blue_button', 'red_button', 'slider_start', 'slider_end', 'meter_plug_black', 'meter_plug_red', 'door_knob', 'gui', 'wind_cable', 'probe_point']
         ns = '/task_board_detector/'
         self.pose_publishers = []
         for name in self.all_link_names:
