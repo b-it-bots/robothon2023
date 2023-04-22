@@ -46,26 +46,33 @@ class WindCableAction(AbstractAction):
         msg = PoseStamped()
         msg.header.frame_id = "wind_cable_link"
         msg.header.stamp = rospy.Time(0)
-        probe_initial_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True, offset=[0, 0, math.pi/2])
+        wind_cable_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True, offset=[0, 0, math.pi/2])
 
-        # convert the probe initial position to a kinova pose
-        probe_initial_pose_kp = get_kinovapose_from_pose_stamped(probe_initial_pose)
+        # convert to kinova pose
+        kp = get_kinovapose_from_pose_stamped(wind_cable_pose)
 
-        probe_initial_pose_kp.z += 0.05
+        kp.z -= 0.01
 
-        # go to the probe initial position
-        success = self.arm.send_cartesian_pose(probe_initial_pose_kp)
+        # send to arm
+        rospy.loginfo("Sending pre-perceive pose to arm")
+        success = self.arm.send_cartesian_pose(kp)
 
-        while self.image is None:
-            rospy.logwarn("Waiting for image")
-            rospy.sleep(0.5)
-            
-        self.run_visual_servoing(self.detect_wind_cable, run=True)
-            
-        probe_initial_pose_kp.z -= 0.07
 
-        success = self.arm.send_cartesian_pose(probe_initial_pose_kp)
+        
+        return success
 
+    def act(self) -> bool:
+        
+        # start visual servoing
+        rospy.loginfo("Starting visual servoing")
+        # success = self.run_visual_servoing(self.detect_wind_cable, True)
+
+        # if not success:
+        #     return False
+        
+        # wind cable
+        success = self.wind_cable()
+        
         if not success:
             return False
 
