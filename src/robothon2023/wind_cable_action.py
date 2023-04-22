@@ -37,12 +37,38 @@ class WindCableAction(AbstractAction):
 
     def pre_perceive(self) -> bool:
         print ("in pre perceive")        
+
+        # pre-perceive pose
+
+        # get the pre-perceive pose from tf
+        msg = PoseStamped()
+        msg.header.frame_id = "wind_cable_link"
+        msg.header.stamp = rospy.Time(0)
+        wind_cable_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True)
+
+        # convert to kinova pose
+        kp = get_kinovapose_from_pose_stamped(wind_cable_pose)
+
+        # send to arm
+        rospy.loginfo("Sending pre-perceive pose to arm")
+        success = self.arm.send_cartesian_pose(kp)
         
-        return True
+        return success
 
     def act(self) -> bool:
+        
+        # start visual servoing
+        rospy.loginfo("Starting visual servoing")
+        success = self.run_visual_servoing(self.detect_wind_cablem, True)
 
-        success = self.wind_cable()
+        if not success:
+            return False
+        
+        # wind cable
+        # success = self.wind_cable()
+        
+        if not success:
+            return False
 
         return success
 
@@ -75,7 +101,7 @@ class WindCableAction(AbstractAction):
             num_poses = len(poses)
 
             waypoints = []
-
+            
             # for each pose, get the pose and convert to kinova pose
             for j in range(pose_num, num_poses+pose_num):
                 pose = poses["pose" + str(j)]
@@ -98,9 +124,9 @@ class WindCableAction(AbstractAction):
 
                 waypoints.append(kp)
 
-            if pose_num == 1:
-                print('going to pose 1')
-                self.arm.send_cartesian_pose(waypoints[0])
+            # if pose_num == 1:
+            #     print('going to pose 1')
+            #     self.arm.send_cartesian_pose(waypoints[0])
 
             pose_num += num_poses
 
@@ -109,6 +135,67 @@ class WindCableAction(AbstractAction):
             success = self.arm.traverse_waypoints(waypoints)
 
         print('first round done')
+
+        # round 2
+        pose_num = 1
+        for i in range(1, 5):
+            gripper_angle = rospy.get_param("~wind_poses/traj" + str(i)+"/gripper")
+            
+            poses = rospy.get_param("~wind_poses/traj" + str(i)+"/poses")
+            
+            # from poses dict, get number of poses
+            num_poses = len(poses)
+
+            waypoints = []
+            
+            # for each pose, get the pose and convert to kinova pose
+            for j in range(pose_num, num_poses+pose_num):
+                pose = poses["pose" + str(j)]
+
+                msg = PoseStamped()
+                msg.header.frame_id = "board_link"
+                msg.pose.position.x = pose["position"]["x"]
+                msg.pose.position.y = pose["position"]["y"]
+                msg.pose.position.z = pose["position"]["z"]
+                msg.pose.orientation.x = pose["orientation"]["x"]
+                msg.pose.orientation.y = pose["orientation"]["y"]
+                msg.pose.orientation.z = pose["orientation"]["z"]
+                msg.pose.orientation.w = pose["orientation"]["w"]
+
+                # convert to base_link frame
+                msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+
+                # convert to kinova_pose
+                kp = get_kinovapose_from_pose_stamped(msg_in_base)
+
+                waypoints.append(kp)
+
+            pose_num += num_poses
+
+            print('gripper closed')
+            self.arm.execute_gripper_command(gripper_angle)
+            success = self.arm.traverse_waypoints(waypoints)
+
+        # go to end pose
+        pose = rospy.get_param("~wind_poses/traj1/poses/pose2")
+
+        msg = PoseStamped()
+        msg.header.frame_id = "board_link"
+        msg.pose.position.x = pose["position"]["x"]
+        msg.pose.position.y = pose["position"]["y"]
+        msg.pose.position.z = pose["position"]["z"]
+        msg.pose.orientation.x = pose["orientation"]["x"]
+        msg.pose.orientation.y = pose["orientation"]["y"]
+        msg.pose.orientation.z = pose["orientation"]["z"]
+        msg.pose.orientation.w = pose["orientation"]["w"]
+
+        # convert to base_link frame
+        msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+
+        # convert to kinova_pose
+        kp = get_kinovapose_from_pose_stamped(msg_in_base)
+
+        success = self.arm.send_cartesian_pose(kp)
 
         return success
     

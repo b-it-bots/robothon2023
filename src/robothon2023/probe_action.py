@@ -538,10 +538,10 @@ class ProbeAction(AbstractAction):
         # Convert image to HSV
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-        # find the orange object in the image 
-        lower_orange = np.array([0, 100, 100])
-        upper_orange = np.array([10, 255, 255])
-        mask = cv2.inRange(hsv, lower_orange, upper_orange)
+        # find the gray color holder object in the image 
+        lower_gray = np.array([0, 0, 100])
+        upper_gray = np.array([180, 255, 255])
+        mask = cv2.inRange(hsv, lower_gray, upper_gray)
 
         # draw the contours of the orange object in the image
         contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
