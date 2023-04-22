@@ -70,7 +70,7 @@ class TransformUtils(object):
         input target_frame: The name of the taget frame.
         input retries: The number of retries.
         input execute_arm: If true, the pose will be rotated by 180 degrees around the x axis.
-        input offset: [r, p, y] offset in deg to be added to the pose if execute_arm is true.
+        input offset: [r, p, y] offset in rad to be added to the pose if execute_arm is true.
 
         :return: The updated state.
         :rtype: geometry_msgs.msg.PoseStamped or None
