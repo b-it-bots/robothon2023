@@ -167,6 +167,14 @@ class PlugRemoveSlidAction(AbstractAction):
         if save_debug_images:
             self.save_debug_images()
 
+        # parameters
+        circularity_threshold_low = 0.85
+        contours_area_threshold_low = 3000
+        contours_area_threshold_high = 9000
+        red_color_threshold_low = 30
+        red_color_threshold_high = 80
+
+        # crop to ROI
         min_x = 280
         max_x = 1000
         min_y = 100
@@ -177,10 +185,12 @@ class PlugRemoveSlidAction(AbstractAction):
 
         # crop to ROI
         image = self.image[min_y:max_y, min_x:max_x]
+        image_copy = image.copy()
 
-        circularity_threshold = 0.8
-        contours_area_threshold = 100
-        black_color_threshold = 60
+        # draw a horizontal line from the target point
+        cv2.line(image, (0, target_y), (image.shape[1], target_y), (0, 0, 255), 2)
+        # draw a vertical line from the target point
+        cv2.line(image, (target_x, 0), (target_x, image.shape[0]), (0, 0, 255), 2)
 
         # find the contours
         # convert the image to grayscale
@@ -193,20 +203,8 @@ class PlugRemoveSlidAction(AbstractAction):
         contours, _ = cv2.findContours(
             canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
-        # draw a horizontal line in the middle of the image
-        horizontal_line = [(0, image.shape[0] // 2),
-                        (image.shape[1], image.shape[0] // 2)]
-        cv2.line(image, horizontal_line[0], horizontal_line[1], (0, 0, 255), 2)
-
-        # draw a vertical line in the middle of the image
-        vertical_line = [(image.shape[1] // 2, 0),
-                        (image.shape[1] // 2, image.shape[0])]
-        cv2.line(image, vertical_line[0], vertical_line[1], (0, 0, 255), 2)
-
         # filter out black contours
         filtered_contours = []
-        mean_colors = []
-        circularities = []
         for contour in contours:
 
             # Calculate area and perimeter of the contour
@@ -214,57 +212,81 @@ class PlugRemoveSlidAction(AbstractAction):
             perimeter = cv2.arcLength(contour, True)
 
             # filter out small contours
-            if area < contours_area_threshold:
+            if area < contours_area_threshold_low or area > contours_area_threshold_high:
                 continue
 
             # Calculate circularity of the contour (reference: https://en.wikipedia.org/wiki/Roundness)
             circularity = (4 * np.pi * area) / (perimeter ** 2)
+
+            # filter out non circular contours
+            if circularity < circularity_threshold_low:
+                continue
+
+            # draw the contour on the image
+            # cv2.drawContours(image, [contour], -1, (0, 255, 0), 2)
 
             # create a mask of the contour
             n_mask = np.zeros(image.shape[:2], dtype="uint8")
             cv2.drawContours(n_mask, [contour], 0, (255, 255, 255), -1)
 
             # get the mean color of the contour using the mask
-            mean_color = cv2.mean(image, mask=n_mask)
+            mean_color = cv2.mean(image_copy, mask=n_mask)
 
-            # filter out non black contours
-            # threshold the circularity value to classify the contour as circular or not
-            if mean_color[0] < black_color_threshold and circularity > circularity_threshold:
+            # filter out non red contours
+            if mean_color[0] < red_color_threshold_high and mean_color[0] > red_color_threshold_low:
                 filtered_contours.append(contour)
-                mean_colors.append(mean_color[0])
-                circularities.append(circularity)
 
-        # print("Number of filtered contours: {}".format(len(filtered_contours)))
+        print("Number of filtered contours: {}".format(len(filtered_contours)))
 
         # NOTE: it should only be one contour
-        # draw the filtered contour one by one on the image
-        if len(filtered_contours) == 1:
-            contour = filtered_contours[0]
-            cv2.drawContours(image, [contour], -1, (255, 0, 0), 3)
+        if len(filtered_contours) > 1:
+            print("More than one contour found!")
+            print("TODO 1: failure recovery mechanism")
+            return None, None
+
+        elif len(filtered_contours) == 1:
+            # draw the contour on the image
+            cv2.drawContours(image, filtered_contours, -1, (0, 255, 0), 2)
 
             # calculate the centroid of the contour
-            M = cv2.moments(contour)
+            M = cv2.moments(filtered_contours[0])
             centroid_x = int(M["m10"] / M["m00"])
             centroid_y = int(M["m01"] / M["m00"])
-            centroid = (centroid_x, centroid_y)
-            cv2.circle(image, centroid, 5, (0, 0, 255), -1)
 
-            # calculate the perpendicular distance between the vertical line and the centroid in the image (y-axis only)
+            # draw the centroid on the image
+            cv2.circle(image, (centroid_x, centroid_y), 5, (0, 0, 255), -1)
+
+            # calculate the error
             error_x = target_x - centroid_x
             error_y = target_y - centroid_y
-            #rospy.loginfo('Centroid: %d, %d, Error: %d, %d' % (centroid_x, centroid_y, error_x, error_y))
+            rospy.loginfo('Centroid: %d, %d, Error: %d, %d' % (centroid_x, centroid_y, error_x, error_y))
+            # print('Centroid: %d, %d, Error: %d, %d' % (centroid_x, centroid_y, error_x, error_y))
 
-            # draw the error line on the image from the centroid to the vertical line
-            error_line = [(target_x, target_y), (target_x + error_x, target_y)]
-            cv2.line(image, error_line[0], error_line[1], (0, 255, 0), 2)
-            error_line = [(target_x, target_y), (target_x, target_y - error_y)]
-            cv2.line(image, error_line[0], error_line[1], (0, 255, 0), 2)
-        else: # if there are no contours, or more than one contour, we fail
+            # print the error in the image
+            cv2.putText(image, "Error: {}, {}".format(error_x, error_y),
+                        (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+
+            # draw a horizontal error line from the centroid to the target point (x-axis only)
+            horizontal_line = [(centroid_x, centroid_y), (target_x, centroid_y)]
+            cv2.line(image, horizontal_line[0], horizontal_line[1], (0, 255, 0), 2)
+
+            # draw a vertical error line from the end of the horizontal line to the target point (y-axis only)
+            vertical_line = [(target_x, centroid_y), (target_x, target_y)]
+            cv2.line(image, vertical_line[0], vertical_line[1], (0, 255, 0), 2)
+
+            # show the result
+            # cv2.imshow("Filtered Contours", image)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
+
+        else:
+            print("No contour found!")
             error_x = None
             error_y = None
+        
         self.img_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
         return error_x, error_y
-
+        
     def align_red_port(self):
         min_x = 200
         max_x = 1000
