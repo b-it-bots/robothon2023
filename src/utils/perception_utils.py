@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 
 def dilate(img, dilation_size=1):
     dilation_shape = cv2.MORPH_RECT
