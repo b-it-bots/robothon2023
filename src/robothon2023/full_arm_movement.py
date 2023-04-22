@@ -101,14 +101,6 @@ class FullArmMovement:
         req = ExecuteActionRequest()
         trajectory = WaypointList()
 
-        # client = actionlib.SimpleActionClient('/' + self.robot_name + '/cartesian_trajectory_controller/follow_cartesian_trajectory', 
-        #                                       kortex_driver.msg.FollowCartesianTrajectoryAction)
-
-        # rospy.loginfo("Waiting for cartesian waypoint server...")
-        # client.wait_for_server()
-
-        # goal = FollowCartesianTrajectoryGoal()
-
         # create waypoints
         for kinova_pose in waypoints:
              trajectory.waypoints.append(self.FillCartesianWaypoint(kinova_pose.x,
@@ -126,14 +118,11 @@ class FullArmMovement:
         # Call the service
         rospy.loginfo("Sending goal(Cartesian waypoint) to action server...")
         try:
-            # client.send_goal(goal)
             self.execute_action(req)
         except rospy.ServiceException:
             rospy.logerr("Failed to send goal.")
             return False
         else:
-            # client.wait_for_result()
-            # return True
             return self.wait_for_action_end_or_abort()
         
     def FillCartesianWaypointTW(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius):
@@ -156,47 +145,6 @@ class FullArmMovement:
         cartesianWaypoint.blending_radius = blending_radius
        
         return cartesianWaypoint
-    
-    def generate_point_to_point_waypoints(self, target_pose: KinovaPose):
-        '''
-        input: target pose in base frame\n
-
-        generate waypoints for point to point motion to avoid collisions
-        '''
-
-        # generate waypoints for point to point motion
-        waypoints = []
-        
-        feedback = rospy.wait_for_message("/" + self.robot_name + "/base_feedback", BaseCyclic_Feedback)
-
-        waypoints.append(
-            feedback.base.commanded_tool_pose_x,
-            feedback.base.commanded_tool_pose_y,
-            feedback.base.commanded_tool_pose_z + 0.05,
-            feedback.base.commanded_tool_pose_theta_x,
-            feedback.base.commanded_tool_pose_theta_y,
-            feedback.base.commanded_tool_pose_theta_z
-        )
-
-        waypoints.append(
-            target_pose.x,
-            target_pose.y,
-            target_pose.z + 0.05,
-            target_pose.theta_x_deg,
-            target_pose.theta_y_deg,
-            target_pose.theta_z_deg
-        )
-
-        waypoints.append(
-            target_pose.x,
-            target_pose.y,
-            target_pose.z,
-            target_pose.theta_x_deg,
-            target_pose.theta_y_deg,
-            target_pose.theta_z_deg
-        )
-
-        return waypoints
     
     def FillCartesianWaypoint(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius):
         '''
@@ -437,7 +385,9 @@ class FullArmMovement:
         self.cartesian_velocity_pub.publish(velocity_vector)
         return True
     
-    def move_down_with_caution(self, distance=0.05, time=6, velocity=None, force_threshold=[4,4,4], ref_frame=CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL):
+    def move_down_with_caution(self, distance=0.05, time=6, velocity=None,
+                                force_threshold=[4,4,4],  tool_z_thresh=0.108,
+                                ref_frame=CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL):
         """
         Move the arm with caution using velocity and force monitoring
 
@@ -463,11 +413,14 @@ class FullArmMovement:
         approach_twist.reference_frame = ref_frame
         approach_twist.twist.linear_z = velocity
 
+        dist_flag = False
+
         while not self.fm.force_limit_flag and not rospy.is_shutdown(): 
             # check for force limit flag and stop if it is true
             # check for the z axis of the tooltip and stop if it is less than 0.111(m) (the z axis of the slider) from base frame
-
-            if self.fm.force_limit_flag:
+            current_pose = self.get_current_pose()
+            if self.fm.force_limit_flag or current_pose.z < tool_z_thresh:
+                dist_flag = True
                 break
             self.cartesian_velocity_pub.publish(approach_twist)
             rate_loop.sleep()
@@ -484,7 +437,7 @@ class FullArmMovement:
         retract_twist = TwistCommand()
         retract_twist.reference_frame = ref_frame
         retract_twist.twist.linear_z = -velocity
-        if self.fm.force_limit_flag:
+        if self.fm.force_limit_flag or dist_flag:
             self.cartesian_velocity_pub.publish(retract_twist)
             rospy.sleep(time)
         

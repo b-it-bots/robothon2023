@@ -49,6 +49,10 @@ class ForceMeasurmement:
                     self._force['x'].clear()
                     self._force['y'].clear()
                     self._force['z'].clear()
+            else:
+                self._force['x'].clear()
+                self._force['y'].clear()
+                self._force['z'].clear()
         else:
             # rospy.logwarn("Force data not enough")
             pass
