@@ -54,8 +54,6 @@ class WindCableAction(AbstractAction):
         # send to arm
         rospy.loginfo("Sending pre-perceive pose to arm")
         success = self.arm.send_cartesian_pose(kp)
-
-
         
         return success
 
@@ -63,6 +61,7 @@ class WindCableAction(AbstractAction):
         
         # start visual servoing
         rospy.loginfo("Starting visual servoing")
+        # TODO: fix the visual servoing
         # success = self.run_visual_servoing(self.detect_wind_cable, True)
 
         # if not success:
@@ -71,6 +70,13 @@ class WindCableAction(AbstractAction):
         # wind cable
         success = self.wind_cable()
         
+        if not success:
+            return False
+        
+        # tuck the probe into board
+        rospy.loginfo("Tucking probe into board")
+        success = self.tuck_probe_into_board()
+
         if not success:
             return False
 
@@ -91,10 +97,8 @@ class WindCableAction(AbstractAction):
     
     def wind_cable(self) -> bool:
 
-        wind_cable_kinova_poses = []
         pose_num = 1
         self.arm.execute_gripper_command(0.0)
-        print('gripper opened 67')
         success = False
         for i in range(1, 5):
             gripper_angle = rospy.get_param("~wind_poses/traj" + str(i)+"/gripper")
@@ -128,10 +132,6 @@ class WindCableAction(AbstractAction):
 
                 waypoints.append(kp)
 
-            # if pose_num == 1:
-            #     print('going to pose 1')
-            #     self.arm.send_cartesian_pose(waypoints[0])
-
             pose_num += num_poses
 
             print('gripper closed')
@@ -141,6 +141,7 @@ class WindCableAction(AbstractAction):
         print('first round done')
 
         # round 2
+        # TODO: check the second round of wind cable if its correct
         pose_num = 1
         for i in range(1, 5):
             gripper_angle = rospy.get_param("~wind_poses/traj" + str(i)+"/gripper")
@@ -181,6 +182,7 @@ class WindCableAction(AbstractAction):
             success = self.arm.traverse_waypoints(waypoints)
 
         # go to end pose
+        # TODO: change the end pose to the correct one
         pose = rospy.get_param("~wind_poses/traj1/poses/pose2")
 
         msg = PoseStamped()
@@ -203,6 +205,10 @@ class WindCableAction(AbstractAction):
 
         return success
     
+    def tuck_probe_into_board(self) -> bool:
+        # TODO: implement with velocity control
+        return True
+
     def run_visual_servoing(self, vs_target_fn, run=True):
         stop = False
         while not rospy.is_shutdown():
