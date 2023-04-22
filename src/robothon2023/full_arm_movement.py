@@ -478,7 +478,7 @@ class FullArmMovement:
         
         self.fm.disable_monitoring()
 
-        distance = 0.008 ; time = 1 # move back 8 mm
+        distance = 0.015 ; time = 1 # move back 8 mm
         velocity = distance/time
 
         retract_twist = TwistCommand()
