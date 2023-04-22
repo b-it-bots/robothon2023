@@ -64,7 +64,7 @@ class PlugRemoveSlidAction(AbstractAction):
         self.move_up_done = False
         self.move_down_done = False
         self.close_gripper_done = False
-        self.save_debug_images_dir = "/home/mas-demo/temp/robothon2023"
+        self.save_debug_images_dir = "/home/b-it-bots/temp/robothon"
 
     def base_feedback_cb(self, msg):
         self.current_force_z.append(msg.base.tool_external_wrench_force_z)
@@ -89,9 +89,9 @@ class PlugRemoveSlidAction(AbstractAction):
     def act(self) -> bool:
         print ("in act")
         #Allign camera
-        self.run_visual_servoing(self.align_black_port, run=True)
+        self.run_visual_servoing(self.align_black_port, save_debug_images=True, run=True)
         self.move_down_velocity_control()
-        self.arm.execute_gripper_command(0.9) #close gripper
+        self.arm.execute_gripper_command(1.0) #close gripper
         self.move_up_velocity_control()
         self.move_forward()
         inserted = False
@@ -116,7 +116,7 @@ class PlugRemoveSlidAction(AbstractAction):
             print(e)
         self.image = image
 
-    def run_visual_servoing(self, vs_target_fn, run=True):
+    def run_visual_servoing(self, vs_target_fn, save_debug_images=False, run=True):
         stop = False
         while not rospy.is_shutdown():
             if self.image is None:
@@ -125,7 +125,7 @@ class PlugRemoveSlidAction(AbstractAction):
                 continue
             msg = kortex_driver.msg.TwistCommand()
             msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-            x_error, y_error = vs_target_fn()
+            x_error, y_error = vs_target_fn(save_debug_images)
             if x_error is None:
                 print('none')
                 msg.twist.linear_x = 0.0
