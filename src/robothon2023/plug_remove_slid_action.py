@@ -187,16 +187,13 @@ class PlugRemoveSlidAction(AbstractAction):
         image = self.image[min_y:max_y, min_x:max_x]
         image_copy = image.copy()
 
-        # draw a horizontal line from the target point
-        cv2.line(image, (0, target_y), (image.shape[1], target_y), (0, 0, 255), 2)
-        # draw a vertical line from the target point
-        cv2.line(image, (target_x, 0), (target_x, image.shape[0]), (0, 0, 255), 2)
-
         # find the contours
         # convert the image to grayscale
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
         # apply gaussian blur to the image
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
+        # otsu thresholding
+        ret, blur = cv2.threshold(blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         # apply canny edge detection
         canny = cv2.Canny(blur, 50, 150)
         # find the contours
@@ -247,6 +244,14 @@ class PlugRemoveSlidAction(AbstractAction):
         elif len(filtered_contours) == 1:
             # draw the contour on the image
             cv2.drawContours(image, filtered_contours, -1, (0, 255, 0), 2)
+
+            # display the image with target points
+            cv2.circle(image, (target_x, target_y), 5, (255, 255, 0), -1)
+
+            # draw a horizontal line from the target point
+            cv2.line(image, (0, target_y), (image.shape[1], target_y), (0, 0, 255), 2)
+            # draw a vertical line from the target point
+            cv2.line(image, (target_x, 0), (target_x, image.shape[0]), (0, 0, 255), 2)
 
             # calculate the centroid of the contour
             M = cv2.moments(filtered_contours[0])
