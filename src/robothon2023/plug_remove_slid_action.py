@@ -12,6 +12,8 @@ import cv2
 from sensor_msgs.msg import Image
 import math
 import scipy.spatial as spatial
+import datetime
+import os
 
 def dilate(img, dilation_size=1):
     dilation_shape = cv2.MORPH_RECT
@@ -62,6 +64,7 @@ class PlugRemoveSlidAction(AbstractAction):
         self.move_up_done = False
         self.move_down_done = False
         self.close_gripper_done = False
+        self.save_debug_images_dir = "/home/mas-demo/temp/robothon2023"
 
     def base_feedback_cb(self, msg):
         self.current_force_z.append(msg.base.tool_external_wrench_force_z)
@@ -159,7 +162,11 @@ class PlugRemoveSlidAction(AbstractAction):
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
         self.cart_vel_pub.publish(msg)
 
-    def align_black_port(self):
+    def align_black_port(self, save_debug_images=False):
+
+        if save_debug_images:
+            self.save_debug_images()
+
         min_x = 280
         max_x = 1000
         min_y = 100
@@ -486,3 +493,19 @@ class PlugRemoveSlidAction(AbstractAction):
         self.cart_vel_pub.publish(msg)
         self.loop_rate.sleep()
         self.cart_vel_pub.publish(msg)
+
+    def save_debug_images(self):
+        rospy.loginfo_once("Saving debug images")
+
+        # check if the directory exists
+        if not os.path.exists(self.save_debug_images_dir):
+            pass
+            # TODO: create a directory
+        else:
+            # get the current date and time
+            now = datetime.datetime.now()
+            date_time = now.strftime("%m_%d_%Y_%H_%M_%S")
+
+            # save the images
+            cv2.imwrite(os.path.join(self.save_debug_images_dir, date_time + "_rgb.png"), self.image)
+        
