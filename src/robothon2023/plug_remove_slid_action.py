@@ -190,6 +190,8 @@ class PlugRemoveSlidAction(AbstractAction):
         # find the contours
         # convert the image to grayscale
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        gray = clahe.apply(gray)
         # apply gaussian blur to the image
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
         # otsu thresholding
