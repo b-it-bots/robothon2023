@@ -4,10 +4,12 @@ import rospy
 from robothon2023.abstract_action import AbstractAction
 from geometry_msgs.msg import PoseStamped, Quaternion
 import geometry_msgs.msg
+import sensor_msgs.msg
 from sensor_msgs.msg import Image
 from robothon2023.full_arm_movement import FullArmMovement
 from robothon2023.transform_utils import TransformUtils
 from utils.kinova_pose import KinovaPose, get_kinovapose_from_list, get_kinovapose_from_pose_stamped
+from utils.perception_utils import dilate, erode, get_uppermost_contour
 
 from kortex_driver.srv import *
 from kortex_driver.msg import *
@@ -21,13 +23,30 @@ import numpy as np
 class ProbeAction(AbstractAction):
     def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
         super().__init__(arm, transform_utils)
+        self.current_force_z = []
+        self.current_height = None
+        self.loop_rate = rospy.Rate(10)
         self.cart_vel_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
+        self.base_feedback_sub = rospy.Subscriber('/my_gen3/base_feedback', kortex_driver.msg.BaseCyclic_Feedback, self.base_feedback_cb)
         self.door_knob_pose_pub = rospy.Publisher("/door_knob_pose", PoseStamped, queue_size=1)
         self.probe_cable_dir_debug_pub = rospy.Publisher('/probe_cable_dir_debug', Image, queue_size=1)
+        self.image_sub = rospy.Subscriber('/camera/color/image_raw', sensor_msgs.msg.Image, self.image_cb)
         self.debug = rospy.get_param("~debug", False)
         self.bridge = cv_bridge.CvBridge()
         self.transform_utils = TransformUtils()
+        
 
+    def base_feedback_cb(self, msg):
+        self.current_force_z.append(msg.base.tool_external_wrench_force_z)
+        if len(self.current_force_z) > 25:
+            self.current_force_z.pop(0)
+        self.current_height = msg.base.tool_pose_z
+
+    
+    
+    
+    def image_cb(self, msg):
+        self.image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
     def pre_perceive(self) -> bool:
         print ("in pre perceive")        
         
@@ -69,9 +88,19 @@ class ProbeAction(AbstractAction):
         # success = self.place_probe_safe()
 
         # if not success:
-            # rospy.logerr("[probe_action] Failed to place the probe somewhere safe")
-            # return False
+        #     rospy.logerr("[probe_action] Failed to place the probe somewhere safe")
+        #     return False
         
+        probed = False
+        retries = 0
+        while not probed:
+            self.run_visual_servoing()
+            probed = self.move_down_and_probe()
+            retries += 1
+            if retries > 5:
+                break
+        success = probed
+
         return success
 
     def verify(self) -> bool:
@@ -734,6 +763,149 @@ class ProbeAction(AbstractAction):
 
         return angle
     
+
+    def get_orange_mask(self, img):
+        lower = np.array([80, 120, 140])
+        upper = np.array([120, 255, 255])
+        mask = cv2.inRange(img, lower, upper)
+        mask = dilate(mask)
+        mask = erode(mask)
+        return mask
+
+    def get_probe_point_error(self):
+        ## set at height of 0.3 m (i.e tool_pose_z = 0.3)
+        target_x = 634
+        target_y = 464
+        if self.image is None:
+            return None, None
+        (height, width, c) = self.image.shape
+        start_y = int(height / 4)
+        start_x = int(width * 0.4)
+        img = self.image[start_y:int(height - height/4), start_x:int(width - width/4), :]
+        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+        mask = self.get_orange_mask(hsv)
+        cx, cy = get_uppermost_contour(mask)
+        if cx is None:
+            return None, None
+        cv2.circle(img, (cx, cy), 5, (0, 255, 0), 2)
+        cv2.imshow('debug', img)
+        cv2.waitKey(1)
+        error_x = target_x - (cx + start_x)
+        error_y = target_y - (cy + start_y)
+        return error_x, error_y
+
+    def run_visual_servoing(self):
+        success = False
+        rospy.loginfo("Moving to correct height")
+        while not rospy.is_shutdown():
+            # we need to be at 0.3 height to do VS
+            height_error = self.current_height - 0.3
+            msg = kortex_driver.msg.TwistCommand()
+            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            if height_error > 0.001:
+                msg.twist.linear_z = 0.02
+            elif height_error < -0.001:
+                msg.twist.linear_z = -0.02
+            else:
+                break
+            self.cart_vel_pub.publish(msg)
+            self.loop_rate.sleep()
+
+        rospy.loginfo("visual servoing")
+        stop = False
+        while not rospy.is_shutdown():
+            if len(self.current_force_z) < 20:
+                self.loop_rate.sleep()
+                continue
+            msg = kortex_driver.msg.TwistCommand()
+            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            error_x, error_y = self.get_probe_point_error()
+            if error_x is None:
+                msg.twist.linear_x = 0.0
+            else:
+                rospy.loginfo('%d, %d' % (error_x, error_y))
+                if error_x < 0:
+                    msg.twist.linear_x = -0.005
+                if error_x > 0:
+                    msg.twist.linear_x = 0.005
+                if abs(error_x) < 3:
+                    msg.twist.linear_x = 0.0
+                elif abs(error_x) < 10:
+                    msg.twist.linear_x *= 0.5
+
+                if error_y < 0:
+                    msg.twist.linear_y = -0.005
+                if error_y > 0:
+                    msg.twist.linear_y = 0.005
+                if abs(error_y) < 3:
+                    msg.twist.linear_y = 0.0
+                elif abs(error_y) < 10:
+                    msg.twist.linear_y *= 0.5
+            self.cart_vel_pub.publish(msg)
+            if msg.twist.linear_x == 0.0 and msg.twist.linear_y == 0 and error_x is not None:
+                break
+            self.loop_rate.sleep()
+
+    def move_down_and_probe(self):
+        #### Go down fast
+        self.current_force_z = []
+        stop = False
+        while not rospy.is_shutdown():
+            if len(self.current_force_z) < 20:
+                self.loop_rate.sleep()
+                continue
+            msg = kortex_driver.msg.TwistCommand()
+            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            msg.twist.linear_z = 0.02
+            if abs(np.mean(self.current_force_z) - self.current_force_z[-1]) > 3.0:
+                stop = True
+                msg.twist.linear_z = 0.0
+            if self.current_height < 0.235: # just above the hole
+                stop = True
+                msg.twist.linear_z = 0.0
+            self.cart_vel_pub.publish(msg)
+            if stop:
+                break
+            self.loop_rate.sleep()
+
+        #### Go down slowly
+        self.current_force_z = []
+        stop = False
+        while not rospy.is_shutdown():
+            if len(self.current_force_z) < 20:
+                self.loop_rate.sleep()
+                continue
+            msg = kortex_driver.msg.TwistCommand()
+            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            msg.twist.linear_z = 0.005
+            if abs(np.mean(self.current_force_z) - self.current_force_z[-1]) > 5.0:
+                rospy.loginfo("Force difference threshold reached")
+                stop = True
+                msg.twist.linear_z = 0.0
+            if self.current_height < 0.185: # already inside
+                stop = True
+                msg.twist.linear_z = 0.0
+            self.cart_vel_pub.publish(msg)
+            if stop:
+                break
+            self.loop_rate.sleep()
+        probed = False
+        if self.current_height < 0.195:
+            probed = True
+
+        #### Go up
+        msg = kortex_driver.msg.TwistCommand()
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        msg.twist.linear_z = -0.01
+        for idx in range(50):
+            self.cart_vel_pub.publish(msg)
+            self.loop_rate.sleep()
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
+        msg.twist.linear_z = 0.0
+        self.cart_vel_pub.publish(msg)
+        self.loop_rate.sleep()
+        return probed
+
     def get_kinova_pose(self,pose_name):
 
         pose = rospy.get_param("~"+ pose_name)

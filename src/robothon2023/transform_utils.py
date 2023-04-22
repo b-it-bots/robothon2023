@@ -40,6 +40,9 @@ class TransformUtils(object):
         msg = PoseStamped()
         msg.header.frame_id = reference_frame_name #board link is the name of tf
         #msg.header.stamp = rospy.Time.now()
+
+        # rospy.Time(0) returns the latest available data for a specific transform,
+        # instead of the data at a specific point in time.
         msg.header.stamp = rospy.Time(0)
         #make the z axis (blux in rviz) face below  by rotating around x axis
         q = list(tf.transformations.quaternion_from_euler(offset_rotation_euler[0],
