@@ -168,10 +168,10 @@ class PlugRemoveSlidAction(AbstractAction):
             self.save_debug_images()
 
         # parameters
-        circularity_threshold_low = 0.85
+        circularity_threshold_low = 0.82
         contours_area_threshold_low = 3000
         contours_area_threshold_high = 9000
-        red_color_threshold_low = 30
+        red_color_threshold_low = 10
         red_color_threshold_high = 80
 
         # crop to ROI
@@ -190,7 +190,7 @@ class PlugRemoveSlidAction(AbstractAction):
         # find the contours
         # convert the image to grayscale
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-        clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(15, 15))
         gray = clahe.apply(gray)
         # apply gaussian blur to the image
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
@@ -294,7 +294,7 @@ class PlugRemoveSlidAction(AbstractAction):
         self.img_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
         return error_x, error_y
         
-    def align_red_port(self):
+    def align_red_port(self, save_debug_images=False):
         min_x = 200
         max_x = 1000
         min_y = 100
@@ -457,7 +457,7 @@ class PlugRemoveSlidAction(AbstractAction):
                 break
             force_control_loop_rate.sleep()
         inserted_plug = False
-        if self.current_height < 0.120: # we've definitely inserted the plug
+        if self.current_height < 0.130: # we've definitely inserted the plug
             inserted_plug = True
             self.arm.execute_gripper_command(0.3) #open gripper
         msg = kortex_driver.msg.TwistCommand()
@@ -469,6 +469,7 @@ class PlugRemoveSlidAction(AbstractAction):
             self.cart_vel_pub.publish(msg)
             force_control_loop_rate.sleep()
         msg.twist.linear_z = 0.0
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
         self.cart_vel_pub.publish(msg)
         force_control_loop_rate.sleep()
         rospy.sleep(0.1)
