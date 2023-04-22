@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+
+<launch>
+    <!-- Robot namespace -->
+    <arg name="robot_name" default="my_gen3"/>
+
+    <node pkg="robothon2023" type="byod.py" name="byod_task" output="screen">
+        <rosparam command="load" file="$(find robothon2023)/config/byod_poses.yaml"/>
+    </node>
+</launch>

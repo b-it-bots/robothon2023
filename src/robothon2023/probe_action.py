@@ -35,16 +35,12 @@ class ProbeAction(AbstractAction):
         self.bridge = cv_bridge.CvBridge()
         self.transform_utils = TransformUtils()
         
-
     def base_feedback_cb(self, msg):
         self.current_force_z.append(msg.base.tool_external_wrench_force_z)
         if len(self.current_force_z) > 25:
             self.current_force_z.pop(0)
         self.current_height = msg.base.tool_pose_z
 
-    
-    
-    
     def image_cb(self, msg):
         self.image = self.bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
     def pre_perceive(self) -> bool:
