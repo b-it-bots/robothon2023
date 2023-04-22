@@ -16,6 +16,7 @@ import cv2
 import numpy as np
 import math
 import datetime
+import pdb
 
 class WindCableAction(AbstractAction):
     def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
@@ -40,37 +41,6 @@ class WindCableAction(AbstractAction):
         return True
 
     def act(self) -> bool:
-        # success = self.transform_poses()
-
-        # go to the plug link
-        msg = PoseStamped()
-        msg.header.frame_id = "wind_cable_link"
-        msg.header.stamp = rospy.Time(0)
-        probe_initial_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True, offset=[0, 0, math.pi/2])
-
-        # convert the probe initial position to a kinova pose
-        probe_initial_pose_kp = get_kinovapose_from_pose_stamped(probe_initial_pose)
-
-        probe_initial_pose_kp.z += 0.05
-
-        # go to the probe initial position
-        success = self.arm.send_cartesian_pose(probe_initial_pose_kp)
-
-        while self.image is None:
-            rospy.logwarn("Waiting for image")
-            rospy.sleep(0.5)
-            
-        self.run_visual_servoing(self.detect_wind_cable, run=True)
-            
-        probe_initial_pose_kp.z -= 0.07
-
-        success = self.arm.send_cartesian_pose(probe_initial_pose_kp)
-
-        if not success:
-            return False
-
-        # close gripper
-        self.arm.execute_gripper_command(0.8)
 
         success = self.wind_cable()
 
@@ -90,63 +60,55 @@ class WindCableAction(AbstractAction):
         self.image = image
     
     def wind_cable(self) -> bool:
-        
+
         wind_cable_kinova_poses = []
-        for i in range(1, 11):
-            pose = rospy.get_param("~wind_cable_poses/p" + str(i))
+        pose_num = 1
+        self.arm.execute_gripper_command(0.0)
+        print('gripper opened 67')
+        success = False
+        for i in range(1, 5):
+            gripper_angle = rospy.get_param("~wind_poses/traj" + str(i)+"/gripper")
+            
+            poses = rospy.get_param("~wind_poses/traj" + str(i)+"/poses")
+            
+            # from poses dict, get number of poses
+            num_poses = len(poses)
 
-            # convert the euler angles to quaternion
-            euler = [pose[3], pose[4], pose[5]]
-            quaternion = tf.transformations.quaternion_from_euler(euler[0], euler[1], euler[2])
+            waypoints = []
 
-            msg = PoseStamped()
-            msg.header.frame_id = "board_link"
-            msg.pose.position.x = pose[0]
-            msg.pose.position.y = pose[1]
-            msg.pose.position.z = pose[2]
-            msg.pose.orientation = Quaternion(*quaternion)
+            # for each pose, get the pose and convert to kinova pose
+            for j in range(pose_num, num_poses+pose_num):
+                pose = poses["pose" + str(j)]
 
-            # convert to base_link frame
-            msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+                msg = PoseStamped()
+                msg.header.frame_id = "board_link"
+                msg.pose.position.x = pose["position"]["x"]
+                msg.pose.position.y = pose["position"]["y"]
+                msg.pose.position.z = pose["position"]["z"]
+                msg.pose.orientation.x = pose["orientation"]["x"]
+                msg.pose.orientation.y = pose["orientation"]["y"]
+                msg.pose.orientation.z = pose["orientation"]["z"]
+                msg.pose.orientation.w = pose["orientation"]["w"]
 
-            # convert to kinova_pose
-            kp = get_kinovapose_from_pose_stamped(msg_in_base)
+                # convert to base_link frame
+                msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
 
-            wind_cable_kinova_poses.append(kp)
+                # convert to kinova_pose
+                kp = get_kinovapose_from_pose_stamped(msg_in_base)
 
-        success = self.arm.traverse_waypoints(wind_cable_kinova_poses)
+                waypoints.append(kp)
+
+            if pose_num == 1:
+                print('going to pose 1')
+                self.arm.send_cartesian_pose(waypoints[0])
+
+            pose_num += num_poses
+
+            print('gripper closed')
+            self.arm.execute_gripper_command(gripper_angle)
+            success = self.arm.traverse_waypoints(waypoints)
 
         print('first round done')
-
-        wind_cable_kinova_poses2 = []
-        for i in range(1, 12):
-            pose = rospy.get_param("~wind_cable_poses2/p" + str(i))
-
-            # convert the euler angles to quaternion
-            euler = [pose[3], pose[4], pose[5]]
-            quaternion = tf.transformations.quaternion_from_euler(euler[0], euler[1], euler[2])
-
-            msg = PoseStamped()
-            msg.header.frame_id = "board_link"
-            msg.pose.position.x = pose[0]
-            msg.pose.position.y = pose[1]
-            msg.pose.position.z = pose[2]
-            msg.pose.orientation = Quaternion(*quaternion)
-
-            # convert to base_link frame
-            msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
-
-            # convert to kinova_pose
-            kp = get_kinovapose_from_pose_stamped(msg_in_base)
-
-            wind_cable_kinova_poses2.append(kp)
-
-        print('starting second round')
-
-        success = self.arm.traverse_waypoints(wind_cable_kinova_poses2)
-
-        # go out of the way to keep the probe safe
-        # TODO: figure out which way to go
 
         return success
     
