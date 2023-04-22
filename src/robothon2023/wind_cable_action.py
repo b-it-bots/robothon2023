@@ -16,6 +16,7 @@ import cv2
 import numpy as np
 import math
 import datetime
+import pdb
 
 class WindCableAction(AbstractAction):
     def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
@@ -36,13 +37,10 @@ class WindCableAction(AbstractAction):
 
     def pre_perceive(self) -> bool:
         print ("in pre perceive")        
-        
-        return True
 
-    def act(self) -> bool:
-        # success = self.transform_poses()
+        # pre-perceive pose
 
-        # go to the plug link
+        # get the pre-perceive pose from tf
         msg = PoseStamped()
         msg.header.frame_id = "wind_cable_link"
         msg.header.stamp = rospy.Time(0)
@@ -56,8 +54,6 @@ class WindCableAction(AbstractAction):
         # send to arm
         rospy.loginfo("Sending pre-perceive pose to arm")
         success = self.arm.send_cartesian_pose(kp)
-
-
         
         return success
 
@@ -65,6 +61,7 @@ class WindCableAction(AbstractAction):
         
         # start visual servoing
         rospy.loginfo("Starting visual servoing")
+        # TODO: fix the visual servoing
         # success = self.run_visual_servoing(self.detect_wind_cable, True)
 
         # if not success:
@@ -75,11 +72,13 @@ class WindCableAction(AbstractAction):
         
         if not success:
             return False
+        
+        # tuck the probe into board
+        rospy.loginfo("Tucking probe into board")
+        success = self.tuck_probe_into_board()
 
-        # close gripper
-        self.arm.execute_gripper_command(0.8)
-
-        success = self.wind_cable()
+        if not success:
+            return False
 
         return success
 
@@ -97,66 +96,119 @@ class WindCableAction(AbstractAction):
         self.image = image
     
     def wind_cable(self) -> bool:
-        
-        wind_cable_kinova_poses = []
-        for i in range(1, 11):
-            pose = rospy.get_param("~wind_cable_poses/p" + str(i))
 
-            # convert the euler angles to quaternion
-            euler = [pose[3], pose[4], pose[5]]
-            quaternion = tf.transformations.quaternion_from_euler(euler[0], euler[1], euler[2])
+        pose_num = 1
+        self.arm.execute_gripper_command(0.0)
+        success = False
+        for i in range(1, 5):
+            gripper_angle = rospy.get_param("~wind_poses/traj" + str(i)+"/gripper")
+            
+            poses = rospy.get_param("~wind_poses/traj" + str(i)+"/poses")
+            
+            # from poses dict, get number of poses
+            num_poses = len(poses)
 
-            msg = PoseStamped()
-            msg.header.frame_id = "board_link"
-            msg.pose.position.x = pose[0]
-            msg.pose.position.y = pose[1]
-            msg.pose.position.z = pose[2]
-            msg.pose.orientation = Quaternion(*quaternion)
+            waypoints = []
+            
+            # for each pose, get the pose and convert to kinova pose
+            for j in range(pose_num, num_poses+pose_num):
+                pose = poses["pose" + str(j)]
 
-            # convert to base_link frame
-            msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+                msg = PoseStamped()
+                msg.header.frame_id = "board_link"
+                msg.pose.position.x = pose["position"]["x"]
+                msg.pose.position.y = pose["position"]["y"]
+                msg.pose.position.z = pose["position"]["z"]
+                msg.pose.orientation.x = pose["orientation"]["x"]
+                msg.pose.orientation.y = pose["orientation"]["y"]
+                msg.pose.orientation.z = pose["orientation"]["z"]
+                msg.pose.orientation.w = pose["orientation"]["w"]
 
-            # convert to kinova_pose
-            kp = get_kinovapose_from_pose_stamped(msg_in_base)
+                # convert to base_link frame
+                msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
 
-            wind_cable_kinova_poses.append(kp)
+                # convert to kinova_pose
+                kp = get_kinovapose_from_pose_stamped(msg_in_base)
 
-        success = self.arm.traverse_waypoints(wind_cable_kinova_poses)
+                waypoints.append(kp)
+
+            pose_num += num_poses
+
+            print('gripper closed')
+            self.arm.execute_gripper_command(gripper_angle)
+            success = self.arm.traverse_waypoints(waypoints)
 
         print('first round done')
 
-        wind_cable_kinova_poses2 = []
-        for i in range(1, 12):
-            pose = rospy.get_param("~wind_cable_poses2/p" + str(i))
+        # round 2
+        # TODO: check the second round of wind cable if its correct
+        pose_num = 1
+        for i in range(1, 5):
+            gripper_angle = rospy.get_param("~wind_poses/traj" + str(i)+"/gripper")
+            
+            poses = rospy.get_param("~wind_poses/traj" + str(i)+"/poses")
+            
+            # from poses dict, get number of poses
+            num_poses = len(poses)
 
-            # convert the euler angles to quaternion
-            euler = [pose[3], pose[4], pose[5]]
-            quaternion = tf.transformations.quaternion_from_euler(euler[0], euler[1], euler[2])
+            waypoints = []
+            
+            # for each pose, get the pose and convert to kinova pose
+            for j in range(pose_num, num_poses+pose_num):
+                pose = poses["pose" + str(j)]
 
-            msg = PoseStamped()
-            msg.header.frame_id = "board_link"
-            msg.pose.position.x = pose[0]
-            msg.pose.position.y = pose[1]
-            msg.pose.position.z = pose[2]
-            msg.pose.orientation = Quaternion(*quaternion)
+                msg = PoseStamped()
+                msg.header.frame_id = "board_link"
+                msg.pose.position.x = pose["position"]["x"]
+                msg.pose.position.y = pose["position"]["y"]
+                msg.pose.position.z = pose["position"]["z"]
+                msg.pose.orientation.x = pose["orientation"]["x"]
+                msg.pose.orientation.y = pose["orientation"]["y"]
+                msg.pose.orientation.z = pose["orientation"]["z"]
+                msg.pose.orientation.w = pose["orientation"]["w"]
 
-            # convert to base_link frame
-            msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+                # convert to base_link frame
+                msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
 
-            # convert to kinova_pose
-            kp = get_kinovapose_from_pose_stamped(msg_in_base)
+                # convert to kinova_pose
+                kp = get_kinovapose_from_pose_stamped(msg_in_base)
 
-            wind_cable_kinova_poses2.append(kp)
+                waypoints.append(kp)
 
-        print('starting second round')
+            pose_num += num_poses
 
-        success = self.arm.traverse_waypoints(wind_cable_kinova_poses2)
+            print('gripper closed')
+            self.arm.execute_gripper_command(gripper_angle)
+            success = self.arm.traverse_waypoints(waypoints)
 
-        # go out of the way to keep the probe safe
-        # TODO: figure out which way to go
+        # go to end pose
+        # TODO: change the end pose to the correct one
+        pose = rospy.get_param("~wind_poses/traj1/poses/pose2")
+
+        msg = PoseStamped()
+        msg.header.frame_id = "board_link"
+        msg.pose.position.x = pose["position"]["x"]
+        msg.pose.position.y = pose["position"]["y"]
+        msg.pose.position.z = pose["position"]["z"]
+        msg.pose.orientation.x = pose["orientation"]["x"]
+        msg.pose.orientation.y = pose["orientation"]["y"]
+        msg.pose.orientation.z = pose["orientation"]["z"]
+        msg.pose.orientation.w = pose["orientation"]["w"]
+
+        # convert to base_link frame
+        msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+
+        # convert to kinova_pose
+        kp = get_kinovapose_from_pose_stamped(msg_in_base)
+
+        success = self.arm.send_cartesian_pose(kp)
 
         return success
     
+    def tuck_probe_into_board(self) -> bool:
+        # TODO: implement with velocity control
+        return True
+
     def run_visual_servoing(self, vs_target_fn, run=True):
         stop = False
         while not rospy.is_shutdown():
