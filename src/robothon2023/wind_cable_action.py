@@ -172,9 +172,9 @@ class WindCableAction(AbstractAction):
                     msg.twist.linear_x = -0.005
                 if x_error > 0:
                     msg.twist.linear_x = 0.005
-                if abs(x_error) < 10:
+                if abs(x_error) < 40:
                     msg.twist.linear_x = 0.0
-                elif abs(x_error) < 20:
+                elif abs(x_error) < 50:
                     msg.twist.linear_x *= 0.5
 
             if y_error is not None:
@@ -202,45 +202,46 @@ class WindCableAction(AbstractAction):
             self.save_debug_image()
 
         # parameters
-        image_idx = 7  # works for index 0, 7, 9
         circularity_threshold_min = 0.1
-        circularity_threshold_max = 0.7
-        contours_area_threshold_min = 3000
-        contours_area_threshold_max = 19000
-        black_color_threshold = 60
+        circularity_threshold_max = 0.5
+        contours_area_threshold_min = 5000
+        contours_area_threshold_max = 10000
 
         # draw a rectangle on the image from the center of the image
         x_axis_right = 300
         x_axis_left = 300
-        y_axis_top = 200
-        # y_axis_bottom is height of the image
-        y_axis_bottom = self.image.shape[0]
+        y_axis_top = 10
+        y_axis_bottom = self.image.shape[0] # y_axis_bottom is height of the image
 
         # crop the ROI from the image with the rectangle
         roi = self.image[self.image.shape[0] // 2 - y_axis_top:self.image.shape[0] // 2 + y_axis_bottom,
                     self.image.shape[1] // 2 - x_axis_left:self.image.shape[1] // 2 + x_axis_right]
 
+        # draw a white line on the bottom of the image
+        cv2.line(roi, (0, roi.shape[0] - 1), (roi.shape[1],
+                roi.shape[0] - 1), (255, 255, 255), 2)
 
-        # draw a white rectangle on the border of the image
-        cv2.rectangle(roi, (0, 0), (roi.shape[1], roi.shape[0]), (255, 255, 255), 2)
+        # draw a white line on the top of the image
+        cv2.line(roi, (0, 0), (roi.shape[1], 0), (255, 255, 255), 2)
 
         roi_copy = roi.copy()
         roi_copy_2 = roi.copy()
 
-        # canny edge detection on the ROI
         # convert the image to grayscale
         gray = cv2.cvtColor(roi, cv2.COLOR_BGR2GRAY)
         # apply gaussian blur to the image
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
-
+        # otsu thresholding
+        ret, thresh = cv2.threshold(
+            blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
         # apply canny edge detection
-        canny = cv2.Canny(blur, 50, 150)
+        canny = cv2.Canny(thresh, 50, 150)
         # find the contours
         contours, _ = cv2.findContours(
             canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         
         # draw the contours on the image
-        cv2.drawContours(roi_copy, contours, -1, (0, 255, 0), 2)
+        # cv2.drawContours(roi_copy, contours, -1, (0, 255, 0), 2)
 
         # cv2.imshow("Contours", roi_copy)
         # cv2.waitKey(0)
@@ -248,8 +249,6 @@ class WindCableAction(AbstractAction):
 
         # filter out black contours
         filtered_contours = []
-        mean_colors = []
-        circularities = []
         for contour in contours:
 
             # Calculate area and perimeter of the contour
@@ -258,7 +257,6 @@ class WindCableAction(AbstractAction):
 
             # filter out small contours
             if area < contours_area_threshold_min or area > contours_area_threshold_max:
-                # if area < contours_area_threshold_min:
                 continue
 
             # print("Area: {}".format(area))
@@ -272,7 +270,7 @@ class WindCableAction(AbstractAction):
                 continue
             
             # draw contours on the image
-            cv2.drawContours(roi_copy_2, [contour], -1, (0, 255, 0), 2)
+            # cv2.drawContours(roi_copy_2, [contour], -1, (0, 255, 0), 2)
             # cv2.imshow("Contours", roi_copy_2)
             # cv2.waitKey(0)
             # cv2.destroyAllWindows()
@@ -280,7 +278,7 @@ class WindCableAction(AbstractAction):
             filtered_contours.append(contour)
 
         print("Number of filtered contours: {}".format(len(filtered_contours)))
-
+        
         # draw a horizontal line in the middle of the image
         horizontal_line = [(0, roi_copy_2.shape[0] // 2),
                            (roi_copy_2.shape[1], roi_copy_2.shape[0] // 2)]
