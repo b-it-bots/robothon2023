@@ -44,14 +44,18 @@ class WindCableAction(AbstractAction):
         msg = PoseStamped()
         msg.header.frame_id = "wind_cable_link"
         msg.header.stamp = rospy.Time(0)
-        wind_cable_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True)
+        wind_cable_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True, offset=[0, 0, math.pi/2])
 
         # convert to kinova pose
         kp = get_kinovapose_from_pose_stamped(wind_cable_pose)
 
+        kp.z -= 0.01
+
         # send to arm
         rospy.loginfo("Sending pre-perceive pose to arm")
         success = self.arm.send_cartesian_pose(kp)
+
+
         
         return success
 
@@ -59,13 +63,13 @@ class WindCableAction(AbstractAction):
         
         # start visual servoing
         rospy.loginfo("Starting visual servoing")
-        success = self.run_visual_servoing(self.detect_wind_cablem, True)
+        # success = self.run_visual_servoing(self.detect_wind_cable, True)
 
-        if not success:
-            return False
+        # if not success:
+        #     return False
         
         # wind cable
-        # success = self.wind_cable()
+        success = self.wind_cable()
         
         if not success:
             return False

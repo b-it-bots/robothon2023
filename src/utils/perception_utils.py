@@ -1,4 +1,5 @@
 import cv2
+import numpy as np
 
 def dilate(img, dilation_size=1):
     dilation_shape = cv2.MORPH_RECT
@@ -34,3 +35,18 @@ def get_uppermost_contour(img):
                 selected_cy = cY
                 sidx = idx
     return selected_cx, selected_cy
+
+def get_contours(img):
+    contours, hierarchy = cv2.findContours(img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    return contours
+
+def detect_door_circle(img):
+    contours = get_contours(img)
+    plain_img = np.ones_like(img, dtype=np.uint8) * 255
+    cv2.drawContours(plain_img, contours, -1, (0, 0, 0), -1)
+    detected_circles = cv2.HoughCircles(plain_img, cv2.HOUGH_GRADIENT, 1, 60, param1 = 70, param2 = 20, minRadius = 50, maxRadius = 70)
+    if detected_circles is not None:
+        detected_circles = detected_circles.astype(np.uint64)
+        return detected_circles[0]
+    else:
+        return None

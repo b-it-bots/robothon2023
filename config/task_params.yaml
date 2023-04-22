@@ -10,7 +10,6 @@ pre_height_above_button: 0.08
 linear_vel_z: 0.01 # positive going up, negative going down; NOTE: changing this affects force_z_diff_threshold. Low velocities are more stable
 force_z_diff_threshold: 3.0 # if diff between current force and mean force is greater, stop
 probe_holder_pose: [0.5991508364677429, -0.01071108877658844, 0.12583768367767334, 90.0, 0.0, 90.0]
-magnet_pose: [0.4748101830482483, 0.0050267670303583145, 0.02775835245847702, 0.0, 180.0, 90.0]
-probe_holder_pick_pre_pose: [0.5827614068984985, 0.009302420541644096, 0.22012139856815338, 175.94552612304688, 0.0, 90.0]
-probe_pick_from_holder_pose: [0.6260608434677124, 0.005179959814995527, 0.15469416975975037, 175.94552612304688, 0.0, 90.0]
+probe_holder_pick_perceive_pose: [TODO]
+probe_pre_pick_from_holder_pose: [TODO]
 perceive_board_pose: [0.4634, 0.1357, 0.432, -180.0, 0.0, 153.0]
