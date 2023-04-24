@@ -13,6 +13,7 @@
         <rosparam command="load" file="$(find robothon2023)/config/task_params.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/trajectories.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/door_open_trajectories.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/probe_action.yaml"/>
         <remap from="~pose_in" to="$(arg pose_input)" />
     </node>
 </launch>
