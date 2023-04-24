@@ -9,7 +9,7 @@ from robothon2023.abstract_action import AbstractAction
 from robothon2023.full_arm_movement import FullArmMovement
 from geometry_msgs.msg import PoseStamped, Quaternion, Twist, Vector3
 from robothon2023.transform_utils import TransformUtils
-from utils.kinova_pose import KinovaPose, get_kinovapose_from_pose_stamped
+from utils.kinova_pose import KinovaPose, get_kinovapose_from_pose_stamped, get_kinovapose_from_list
 from utils.force_measure import ForceMeasurmement
 
 class ByodAction(AbstractAction):
@@ -20,8 +20,7 @@ class ByodAction(AbstractAction):
         self.fm = ForceMeasurmement()
         self.tf_utils = transform_utils
         self.listener = tf.TransformListener()
-        self.slider_pose = PoseStamped()
-        
+
         self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
         print("BYOD Action Initialized")
         
@@ -30,89 +29,91 @@ class ByodAction(AbstractAction):
         print ("in pre perceive")
         return True
 
+
     def act(self) -> bool:
 
         print ("in act")
 
-        pose_list = []
-
-        # get first 2 poses from param server
-        pose_list.append(self.get_kinova_pose("pose1"))
-        pose_list.append(self.get_kinova_pose("pose2"))
-
-        self.arm.traverse_waypoints(pose_list)
-
+        rospy.loginfo(">> Moving arm to slider <<")
+        success = self.get_poses_and_follow_trajactory()
+        if not success:
+            return False
+        return True
 
     def verify(self) -> bool:
         print ("in verify")
         return True
 
-    def do(self) -> bool:
+    def get_poses_and_follow_trajactory(self):
 
-        success = True
-        
-        success &= self.pre_perceive()
-        success &= self.act()
-        success &= self.verify()
+        pose = rospy.get_param("~byod_poses")
+        pose_list = []
+        for i in pose.values():
+            pose_list.append(get_kinovapose_from_list(list(i.values())))
 
-        return success
+        while not rospy.is_shutdown():
+            for idx, i in enumerate(pose_list):
 
+                if idx+1 == 17 or idx+1 == 19:
+                    # TODO:implement force based button push
+                    i.z += 0.05
+                    success = self.arm.send_cartesian_pose(i)
+                    if not success:
+                        return False
+                    rospy.sleep(1)
+                    self.arm.move_down_with_caution(force_threshold=[5,5,5], tool_z_thresh=0.079, velocity=0.01)
+                    continue
 
-    def stop_arm(self):
-        """
-        Stop arm by sending zero velocity
-        """
+                if idx+1 == 5 or idx+1 == 13:
+                    # TODO : implement force based placing of probe
+                    i.z += 0.03
+                    success = self.arm.send_cartesian_pose(i)
+                    if not success:
+                        return False
+                    rospy.sleep(1)
+                    self.arm.move_down_with_caution(force_threshold=[4,4,4], tool_z_thresh=0.060, velocity= -0.01, approach_axis="y", retract=False) # neg because arm is moving in -y axis 
+                    
+                    rospy.sleep(1)
+                    success = self.arm.execute_gripper_command(0.60)
+                    if not success:
+                        return False
+                    rospy.loginfo(">> Opened Gripper <<")
+                    continue
 
-        velocity_vector = TwistCommand()
-        velocity_vector.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED # for proper joypad control
-        self.cartesian_velocity_pub.publish(velocity_vector)
+                success = self.arm.send_cartesian_pose(i)
+                if not success:
+                    return False
+                rospy.sleep(1)
+                rospy.loginfo(">> pose_"+str(idx+1)+" reached<<")
+
+                list_OG = [1,5,13] 
+                list_CG = [2,8,15]
+                if idx+1 in list_OG:
+                    success = self.arm.execute_gripper_command(0.60)
+                    # rospy.sleep(1)
+                    if not success:
+                        return False
+                    rospy.loginfo(">> Opened Gripper <<")
+
+                if idx+1 in list_CG:
+                    success = self.arm.execute_gripper_command(0.95)
+                    # rospy.sleep(1)
+                    if not success:
+                        return False
+                    rospy.loginfo(">> Closed Gripper <<")
+
+                if idx == len(pose_list)-1 or rospy.is_shutdown():
+                    break
         return True
 
-    def get_kinova_pose(self,pose_name):
+    def read_multimeter_screen(self):
+        pass
 
-        pose = rospy.get_param("~"+ pose_name)
+    def rotate_dial(self):
 
-        sample = PoseStamped()
-        sample.header.stamp = rospy.Time(0)
-        sample.header.frame_id = "board_link"
-        sample.pose.position.x = pose['pose']['position']['x']
-        sample.pose.position.y = pose['pose']['position']['y']
-        sample.pose.position.z = pose['pose']['position']['z']
-        sample.pose.orientation.x = pose['pose']['orientation']['x']
-        sample.pose.orientation.y = pose['pose']['orientation']['y']
-        sample.pose.orientation.z = pose['pose']['orientation']['z']
-        sample.pose.orientation.w = pose['pose']['orientation']['w']
+        
 
-        pose_in_base_link = self.transform_utils.transformed_pose_with_retries(sample, "base_link", 3)
-
-        pose_in_kinova_pose = get_kinovapose_from_pose_stamped(pose_in_base_link)
-
-        return pose_in_kinova_pose
-
-    def get_trajactory_poses(self,num_poses):
-        """
-        get poses
-
-        input: num_poses: number of poses to get
-        return: list of poses
-        """
-
-        pose_list = []
-        for i in range(num_poses):
-            pose_name = "pose" + str(i+1)
-            pose = self.get_kinova_pose(pose_name)
-            pose_list.append(pose)
-        return pose_list
-
-
-
-
-
-
-
-
-
-
+        pass
 
 
 
