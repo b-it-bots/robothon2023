@@ -441,11 +441,10 @@ class FullArmMovement:
         
         self.fm.disable_monitoring()
 
+        force_control_loop_rate = rospy.Rate(rospy.get_param("~force_control_loop_rate", 10.0))
+    
         if retract:
-            
-            distance = 0.015 ; time = 1 # move back 8 mm
-            velocity = distance/time
-
+            velocity = 0.01
             retract_twist = TwistCommand()
             retract_twist.reference_frame = ref_frame
 
@@ -458,7 +457,9 @@ class FullArmMovement:
 
             if self.fm.force_limit_flag or dist_flag:
                 self.cartesian_velocity_pub.publish(retract_twist)
-                rospy.sleep(time)
+                
+                for _ in range(10):
+                    force_control_loop_rate.sleep()
             
             self.stop_arm_velocity()
         return True

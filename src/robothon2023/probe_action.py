@@ -71,7 +71,7 @@ class ProbeAction(AbstractAction):
         
         # pick the probe from the holder
         # TODO: update the stuff for the below method
-        # success = self.pick_probe_from_holder()
+        success = self.pick_probe_from_holder()
         
         # probe the circuit
         # success = self.probe_circuit()
@@ -139,7 +139,7 @@ class ProbeAction(AbstractAction):
         probe_initial_pose_kp = get_kinovapose_from_pose_stamped(probe_initial_pose)
 
         # increase the z position by 5cm
-        probe_initial_pose_kp.z += 0.05
+        probe_initial_pose_kp.z += 0.08
 
         # send the probe initial position to the arm
         rospy.loginfo("[probe_action] moving to probe initial position")
@@ -151,9 +151,11 @@ class ProbeAction(AbstractAction):
         
         rospy.loginfo('[probe_action] reached probe initial position')
 
+        self.arm.execute_gripper_command(0.5) # open the gripper
+
         # use velocity control to move the probe down
         rospy.loginfo("[probe_action] moving down the probe")
-        success = self.arm.move_down_with_caution(force_threshold=[4,4,2], time=8, tool_z_thresh=0.112)
+        success = self.arm.move_down_with_caution(force_threshold=[4,4,2], time=9, tool_z_thresh=0.10)
 
         if not success:
             rospy.logerr("[probe_action] Failed to move down the probe")
@@ -169,7 +171,7 @@ class ProbeAction(AbstractAction):
             return False
 
         # move the probe back in x direction for 4cm
-        success = self.arm.move_with_velocity(-0.04, 3, 'y')
+        success = self.arm.move_with_velocity(0.02, 3, 'y')
 
         if not success:
             rospy.logerr("Failed to move back the probe")
@@ -192,35 +194,56 @@ class ProbeAction(AbstractAction):
 
     def place_probe_in_holder(self):
         # move the probe to the holder
-        # TODO: record the joint angles a bit above the holder and use them here and store them in yaml
-        # joint_angles = [-2.871896993158559, -1.3814386490714288, 0.4168570154209964, 
-        #                 -1.9013785076480678, -2.854268730954997, -1.8617914169923662, -1.9189353971344154, 0.7551724355693522]
+        # TODO: test whether joint andles or cartesian pose is better
+
+        probe_place_pre_holder_pose = rospy.get_param("~probe_action_poses/probe_place_pre_holder_pose")
+
+        probe_place_pre_holder_pose_kp = get_kinovapose_from_list(probe_place_pre_holder_pose)
+
+        rospy.loginfo("[probe_action] moving to probe place pre holder position")
+        success = self.arm.send_cartesian_pose(probe_place_pre_holder_pose_kp)
+
+        if not success:
+            rospy.logerr("[probe_action] Failed to move to the probe place pre holder position")
+            return False
         
-        # convert the joint angles to degrees
-        joint_angles = [math.degrees(ja) for ja in joint_angles]
+        rospy.loginfo('[probe_action] reached probe place pre holder position')
+        
+        # get the probe holder position from rosparam
+        # probe_place_pre_holder_pose_joint_angles = rospy.get_param("~joint_angles/probe_place_pre_holder_pose")
+
+        # rospy.loginfo("[probe_action] sending joint angles")
+        # success = self.arm.send_joint_angles(probe_place_pre_holder_pose_joint_angles)
+
+        # if not success:
+        #     rospy.logerr("Failed to move up the probe")
+        #     return False
+        
+        # rospy.loginfo("moved the probe to above the holder")
+
+        # place in the holder
+        probe_place_in_holder_pose_joint_angles = rospy.get_param("~joint_angles/probe_place_in_holder_pose")
 
         rospy.loginfo("[probe_action] sending joint angles")
-        success = self.arm.send_joint_angles(joint_angles)
+        success = self.arm.send_joint_angles(probe_place_in_holder_pose_joint_angles)
 
         if not success:
             rospy.logerr("Failed to move up the probe")
             return False
         
-        rospy.loginfo("moved up the probe to above the holder")
+        rospy.loginfo("moved the probe to above the holder")
 
-        # get the current pose of the arm
-        current_pose = self.arm.get_current_pose()
+        # do with cartesian control
+        # probe_place_in_holder_pose = rospy.get_param("~probe_place_in_holder_pose")
 
-        # TODO: move down a bit based on how much the probe is above the holder
-        current_pose.z -= 0.105
+        # probe_place_in_holder_pose_kp = get_kinovapose_from_list(probe_place_in_holder_pose)
 
-        success = self.arm.send_cartesian_pose(current_pose)
+        # rospy.loginfo("[probe_action] moving to probe place holder position")
+        # success = self.arm.send_cartesian_pose(probe_place_in_holder_pose_kp)
 
-        if not success:
-            rospy.logerr("Failed to move down the probe")
-            return False
-        
-        rospy.loginfo("moved down the probe to above the holder")
+        # if not success:
+        #     rospy.logerr("[probe_action] Failed to move to the probe place holder position")
+        #     return False
         
         # open the gripper
         success = self.arm.execute_gripper_command(0.0)
@@ -231,8 +254,16 @@ class ProbeAction(AbstractAction):
 
         # move up a bit by 20cm
         current_pose = self.arm.get_current_pose()
-        current_pose.z += 0.2
+        current_pose.x -= 0.10
         
+        success = self.arm.send_cartesian_pose(current_pose)
+
+        if not success:
+            rospy.logerr("Failed to move up the probe")
+            return False
+        
+        current_pose.z += 0.15
+
         success = self.arm.send_cartesian_pose(current_pose)
 
         if not success:
@@ -337,8 +368,7 @@ class ProbeAction(AbstractAction):
     def pick_probe_from_holder(self):
         
         # # go to the probe pick perceive position above the holder
-        # TODO: record new pick perceive to detect cable direction and save in task_params
-        probe_holder_pick_perceive_pose = rospy.get_param("~probe_holder_pick_perceive_pose")
+        probe_holder_pick_perceive_pose = rospy.get_param("~probe_action_poses/probe_holder_perceive_pose")
         probe_holder_pick_perceive_pose_kinova_pose = get_kinovapose_from_list(probe_holder_pick_perceive_pose)
         
         rospy.loginfo("[probe_action] moving to probe holder pick perceive position")
@@ -363,7 +393,7 @@ class ProbeAction(AbstractAction):
             probe_cable_dir = -probe_cable_dir
         
         # get the probe pick from holder pose
-        probe_pre_pick_from_holder_pose = rospy.get_param("~probe_pre_pick_from_holder_pose")
+        probe_pre_pick_from_holder_pose = rospy.get_param("~probe_action_poses/probe_holder_pre_pick_pose")
         probe_pre_pick_from_holder_pose_kinova_pose = get_kinovapose_from_list(probe_pre_pick_from_holder_pose)
 
         probe_pre_pick_from_holder_pose_kinova_pose.z = probe_holder_pick_perceive_pose_kinova_pose.z
@@ -379,14 +409,13 @@ class ProbeAction(AbstractAction):
         rospy.loginfo("[probe_action] reached probe pre pick position")
 
         # rotate the arm to the probe cable direction and set the z to the pick pose z
-        # TODO: set the z
-        probe_pre_pick_from_holder_pose_kinova_pose.z = 'TODO'
-        probe_pre_pick_from_holder_pose_kinova_pose.theta_z_deg = probe_cable_dir
+        probe_pick_pose_from_holder = rospy.get_param("~probe_action_poses/probe_holder_pick_pose")
+        probe_pick_pose_from_holder.theta_z_deg = probe_cable_dir
 
         # move to the probe pick from holder pose
         rospy.loginfo("[probe_action] moving to pick probe from holder position")
         
-        success = self.arm.send_cartesian_pose(probe_pre_pick_from_holder_pose_kinova_pose)
+        success = self.arm.send_cartesian_pose(probe_pick_pose_from_holder)
 
         if not success:
             rospy.logerr("Failed to move to the pick probe from holder position")
@@ -402,9 +431,9 @@ class ProbeAction(AbstractAction):
             return False
         
         # move up a bit
-        probe_pre_pick_from_holder_pose_kinova_pose.z += 0.15
+        probe_pick_pose_from_holder.z += 0.15
 
-        success = self.arm.send_cartesian_pose(probe_pre_pick_from_holder_pose_kinova_pose)
+        success = self.arm.send_cartesian_pose(probe_pick_pose_from_holder)
 
         if not success:
             rospy.logerr("[probe_action] Failed to move up the probe")
@@ -430,35 +459,78 @@ class ProbeAction(AbstractAction):
 
         # crop the border of the image by 25%
         image = image[int(image.shape[0]*0.25):int(image.shape[0]*0.75), int(image.shape[1]*0.25):int(image.shape[1]*0.75)]
+        or_image = image[int(image.shape[0]*0.25):int(image.shape[0]*0.75), int(image.shape[1]*0.25):int(image.shape[1]*0.75)]
 
-        # Convert image to HSV
+        # Convert the image to HSV color space
         hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
 
-        # find the gray color holder object in the image 
-        lower_gray = np.array([0, 0, 100])
-        upper_gray = np.array([180, 255, 255])
-        mask = cv2.inRange(hsv, lower_gray, upper_gray)
+        # Define the lower and upper threshold for the pale orange color
+        lower_orange = np.array([0, 100, 100], dtype=np.uint8)
+        upper_orange = np.array([30, 255, 255], dtype=np.uint8)
 
-        # draw the contours of the orange object in the image
-        contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
+        # Threshold the image to obtain a binary mask of the pale orange regions
+        mask = cv2.inRange(hsv, lower_orange, upper_orange)
 
-        # filter the small contours
-        contours = [c for c in contours if cv2.contourArea(c) > 100]
+        # Apply morphological operations to clean up the mask
+        kernel = np.ones((5, 5), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
 
-        # plot the center of the orange object in the image
+        # Find contours in the mask
+        contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # Draw contours around the detected blobs on the original image
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area > 100:  # Filter out small contours
+                (x, y, w, h) = cv2.boundingRect(contour)
+                cv2.circle(image, (int(x + w / 2), int(y + h / 2)), int((w + h) / 4), (0, 255, 0), 2)
+
+        # find the center of the circle
         M = cv2.moments(contours[0])
         cX = int(M["m10"] / M["m00"])
         cY = int(M["m01"] / M["m00"])
 
-        # find the direction of the black cable from the center of the orange object
-        lower_black = np.array([0, 0, 0])
-        upper_black = np.array([180, 255, 30])
-        mask = cv2.inRange(hsv, lower_black, upper_black)
+        # plot the center of the circle
+        cv2.circle(image, (cX, cY), 7, (255, 255, 255), -1)
+        cv2.putText(image, "center", (cX - 20, cY - 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2)
 
-        contours, hierarchy = cv2.findContours(mask, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        contours = [c for c in contours if cv2.contourArea(c) > 100]
-        cv2.drawContours(image, contours, -1, (0, 255, 0), 3)
+        # Convert the image to grayscale
+        gray = cv2.cvtColor(or_image, cv2.COLOR_BGR2GRAY)
+
+        # Apply GaussianBlur to reduce noise
+        gray_blur = cv2.GaussianBlur(gray, (5, 5), 0)
+
+        # Define the lower and upper threshold for the black color
+        lower_black = np.array([0, 0, 0], dtype=np.uint8)
+        upper_black = np.array([30, 30, 30], dtype=np.uint8)
+
+        # Threshold the image to obtain a binary mask of the black regions
+        mask = cv2.inRange(image, lower_black, upper_black)
+
+        # Apply morphological operations to clean up the mask
+        kernel = np.ones((5, 5), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+        # Find contours in the mask
+        contours, hierarchy = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        # remove all circles from the contours
+        contours = [c for c in contours if cv2.arcLength(c, True) > 100]
+
+        # check if the contour points are inside the circle and remove the contour if only all points are outside
+        for contour in contours:
+            # if all points are outside the circle, remove the contour
+            if all([cv2.pointPolygonTest(contour, (cX, cY), False) < 0 for _ in range(contour.shape[0])]):
+                contours.remove(contour)
+
+        # Draw contours around the detected cables on the original image
+        for contour in contours:
+            area = cv2.contourArea(contour)
+            if area > 100:  # Filter out small contours
+                (x, y, w, h) = cv2.boundingRect(contour)
+                cv2.rectangle(image, (x, y), (x + w, y + h), (0, 255, 0), 2)
 
         M = cv2.moments(contours[0])
         bX = int(M["m10"] / M["m00"])
@@ -478,7 +550,7 @@ class ProbeAction(AbstractAction):
             self.probe_cable_dir_debug_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
 
         # TODO: return the angle
-        return None
+        return angle
 
     def get_door_knob_error(self):
         '''
