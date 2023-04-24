@@ -447,10 +447,14 @@ class FullArmMovement:
                     rospy.logwarn("Force limit in Z axis reached")
                 if current_pose.z < tool_z_thresh:
                     rospy.logwarn("Distance limit in Z axis reached")
+                print("----------------------------------")
+                print("Force value: ", self.fm.accumulated_force[approach_axis]) 
+                print("distance value: ", current_pose.z)
+                print("----------------------------------")
                 break
+                
             self.cartesian_velocity_pub.publish(approach_twist)
             rate_loop.sleep()
-
 
         # rospy.loginfo("Stopping arm velocity")
         success = self.stop_arm_velocity()
