@@ -267,7 +267,7 @@ class RobothonTask(object):
     def gripper_command_window(self, frame: tk.Frame):
         # create a heading for the frame
         self.heading = tk.Label(frame, text="Gripper Command", font=("Helvetica", 14))
-        self.heading.grid(row=0, column=0, columnspan=4, padx=10, pady=10, sticky="nsew") 
+        self.heading.grid(row=0, column=0, padx=10, pady=10, sticky="w") 
 
         self.open_button = tk.Button(frame, text="Open", command=lambda: self.gripper_cb(0.0))
 
@@ -302,39 +302,45 @@ class RobothonTask(object):
         self.heading.grid(row=0, column=0, padx=10, pady=10)
 
         # Create a text box to display the current tool tip pose in base frame
-        # make the text box expand width based on the window size
+        self.base_frame_label = tk.Label(frame, text="Base Frame", font=("Helvetica", 10))
+        self.base_frame_label.grid(row=1, column=0, padx=10, pady=10, sticky="w")
+
         self.base_frame_text = tk.Text(frame, height=3, width=30, font=("Helvetica", 10))
-        self.base_frame_text.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
+        self.base_frame_text.grid(row=2, column=0, padx=10, pady=10, sticky="ew")
         self.base_frame_text.config(state='disabled')
         self.base_frame_text.configure()
 
         # Create a copy button for the base frame text
         self.copy_base_frame_button = ttk.Button(frame, text="Copy", command=lambda: self.copy_to_clipboard(self.base_frame_text.get("1.0", "end-1c")))
-        self.copy_base_frame_button.grid(row=1, column=1, padx=10, pady=10)
+        self.copy_base_frame_button.grid(row=2, column=1, padx=10, pady=10)
 
         # Create a text box to display the current tool tip pose in board frame
-        # make the text box expand width based on the window size
+        self.board_frame_label = tk.Label(frame, text="Board Frame", font=("Helvetica", 10))
+        self.board_frame_label.grid(row=3, column=0, padx=10, pady=10, sticky="w")
+
         self.board_frame_text = tk.Text(frame, height=3, width=30, font=("Helvetica", 10))
-        self.board_frame_text.grid(row=2, column=0, padx=10, pady=10, sticky="ew")
+        self.board_frame_text.grid(row=4, column=0, padx=10, pady=10, sticky="ew")
         self.board_frame_text.config(state='disabled')
 
         # Create a copy button for the board frame text
         self.copy_board_frame_button = ttk.Button(frame, text="Copy", command=lambda: self.copy_to_clipboard(self.board_frame_text.get("1.0", "end-1c")))
-        self.copy_board_frame_button.grid(row=2, column=1, padx=10, pady=10)
+        self.copy_board_frame_button.grid(row=4, column=1, padx=10, pady=10)
 
-        # Create a text box to display the current tool tip pose in joint frame
-        # make the text box expand width based on the window size
+        # Create a text box to display the current tool tip pose in joint angles
+        self.joint_angles_label = tk.Label(frame, text="Joint Angles", font=("Helvetica", 10))
+        self.joint_angles_label.grid(row=5, column=0, padx=10, pady=10, sticky="w")
+
         self.joint_angles_text = tk.Text(frame, height=3, width=30, font=("Helvetica", 10))
-        self.joint_angles_text.grid(row=3, column=0, padx=10, pady=10, sticky="ew")
+        self.joint_angles_text.grid(row=6, column=0, padx=10, pady=10, sticky="ew")
         self.joint_angles_text.config(state='disabled')
 
         # Create a copy button for the joint angles text
         self.copy_joint_angles_button = ttk.Button(frame, text="Copy", command=lambda: self.copy_to_clipboard(self.joint_angles_text.get("1.0", "end-1c")))
-        self.copy_joint_angles_button.grid(row=3, column=1, padx=10, pady=10)
+        self.copy_joint_angles_button.grid(row=6, column=1, padx=10, pady=10)
 
         # Create an update button
         self.update_button = ttk.Button(frame, text="Update", command=self.update_tool_tip_pose)
-        self.update_button.grid(row=4, column=0, padx=10, pady=10, columnspan=2) 
+        self.update_button.grid(row=7, column=0, padx=10, pady=10, columnspan=2) 
 
         # Set button style
         style = ttk.Style()
