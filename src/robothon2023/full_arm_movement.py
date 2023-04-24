@@ -386,7 +386,7 @@ class FullArmMovement:
         return True
     
     def move_down_with_caution(self, distance=0.05, time=6, velocity=None,
-                                force_threshold=[4,4,4],  tool_z_thresh=0.108,
+                                force_threshold=[4,4,4],  tool_z_thresh=0.095,
                                 approach_axis='z',
                                 retract = True,
                                 ref_frame=CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL):
@@ -430,6 +430,7 @@ class FullArmMovement:
             current_pose = self.get_current_pose()
             if self.fm.force_limit_flag or current_pose.z < tool_z_thresh:
                 dist_flag = True
+                rospy.logwarn("Distance limit in Z axis reached")
                 break
             self.cartesian_velocity_pub.publish(approach_twist)
             rate_loop.sleep()
