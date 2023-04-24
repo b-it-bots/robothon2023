@@ -12,7 +12,7 @@ from robothon2023.transform_utils import TransformUtils
 from utils.kinova_pose import KinovaPose, get_kinovapose_from_pose_stamped
 from utils.force_measure import ForceMeasurmement
 
-class SliderAction(AbstractAction):
+class ByodAction(AbstractAction):
 
     def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils):
         super().__init__(arm, transform_utils)
@@ -28,18 +28,19 @@ class SliderAction(AbstractAction):
 
     def pre_perceive(self) -> bool:
         print ("in pre perceive")
-
-        print("Getting slider pose")
-        self.get_slider_pose()
         return True
 
     def act(self) -> bool:
+
         print ("in act")
 
-        rospy.loginfo(">> Moving arm to slider <<")
-        if not self.move_arm_to_slider():
-            return False
+        pose_list = []
 
+        # get first 2 poses from param server
+        pose_list.append(self.get_kinova_pose("pose1"))
+        pose_list.append(self.get_kinova_pose("pose2"))
+
+        self.arm.traverse_waypoints(pose_list)
 
 
     def verify(self) -> bool:
@@ -56,23 +57,6 @@ class SliderAction(AbstractAction):
 
         return success
 
-
-    def move_arm_to_slider(self):
-        """
-        Move arm to along slider in with velocity vector
-        """
-
-        offset = 0.08
-        rospy.loginfo("slider pose below")
-        print(self.slider_pose)
-        slider_pose = self.rotate_Z_down(self.slider_pose)
-        pose_to_send = get_kinovapose_from_pose_stamped(slider_pose)
-        pose_to_send.z += offset # add 10 cm to the z axis and then approach the slider
-
-        success = self.arm.send_cartesian_pose(pose_to_send)
-        if not success:
-            return False
-        return True
 
     def stop_arm(self):
         """
