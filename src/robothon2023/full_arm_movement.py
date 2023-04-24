@@ -403,6 +403,7 @@ class FullArmMovement:
         rate_loop = rospy.Rate(10)
         self.fm.set_force_threshold(force=force_threshold) # force in z increases to 4N when it is in contact with the board
 
+        self.fm.reset_force_limit_flag()
         # enable force monitoring
         self.fm.enable_monitoring()
         
@@ -430,16 +431,25 @@ class FullArmMovement:
             current_pose = self.get_current_pose()
             if self.fm.force_limit_flag or current_pose.z < tool_z_thresh:
                 dist_flag = True
-                rospy.logwarn("Distance limit in Z axis reached")
+                if self.fm.force_limit_flag:
+                    rospy.logwarn("Force limit in Z axis reached")
+                if current_pose.z < tool_z_thresh:
+                    rospy.logwarn("Distance limit in Z axis reached")
                 break
             self.cartesian_velocity_pub.publish(approach_twist)
             rate_loop.sleep()
 
+
+        # rospy.loginfo("Stopping arm velocity")
         success = self.stop_arm_velocity()
+        # rospy.loginfo("Stopped arm velocity")
+
         if not success:
             return False
         
+        # rospy.loginfo("Disabling force monitoring")
         self.fm.disable_monitoring()
+        # rospy.loginfo("Force monitoring disabled")
 
         if retract:
             
@@ -461,6 +471,8 @@ class FullArmMovement:
                 rospy.sleep(time)
             
             self.stop_arm_velocity()
+
+        self.fm.reset_force_limit_flag()
         return True
     
     def move_with_velocity(self, distance, time, direction, velocity=None, ref_frame=CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL):
