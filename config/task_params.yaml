@@ -1,10 +1,10 @@
-# 0: start
+# 0: start button
 # 1: slider
 # 2: plug probe
 # 3: probe circuit
 # 4: wrap cable
 # 5: stop
-task_order: [0, 1]
+task_order: [4]
 debug: true
 pre_height_above_button: 0.08
 linear_vel_z: 0.01 # positive going up, negative going down; NOTE: changing this affects force_z_diff_threshold. Low velocities are more stable

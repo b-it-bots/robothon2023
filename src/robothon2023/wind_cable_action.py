@@ -73,6 +73,12 @@ class WindCableAction(AbstractAction):
         if not success:
             return False
         
+        # wind cable
+        success = self.pick_probe_from_holder()
+        
+        if not success:
+            return False
+
         # tuck the probe into board
         rospy.loginfo("Tucking probe into board")
         success = self.tuck_probe_into_board()
@@ -143,7 +149,7 @@ class WindCableAction(AbstractAction):
         # round 2
         # TODO: check the second round of wind cable if its correct
         pose_num = 1
-        for i in range(1, 5):
+        for i in range(1, 4):
             gripper_angle = rospy.get_param("~wind_poses/traj" + str(i)+"/gripper")
             
             poses = rospy.get_param("~wind_poses/traj" + str(i)+"/poses")
@@ -181,30 +187,91 @@ class WindCableAction(AbstractAction):
             self.arm.execute_gripper_command(gripper_angle)
             success = self.arm.traverse_waypoints(waypoints)
 
-        # go to end pose
+        # sliding to tip of the cable
         # TODO: change the end pose to the correct one
-        pose = rospy.get_param("~wind_poses/traj1/poses/pose2")
+        # gripper_angle = rospy.get_param("~wind_poses/placing_traj/gripper")
+        # self.arm.execute_gripper_command(gripper_angle) 
+        # pose = rospy.get_param("~wind_poses/placing_traj/poses/pose10") # msg = PoseStamped()
+        # msg.header.frame_id = "board_link"
+        # msg.pose.position.x = pose["position"]["x"]
+        # msg.pose.position.y = pose["position"]["y"]
+        # msg.pose.position.z = pose["position"]["z"]
+        # msg.pose.orientation.x = pose["orientation"]["x"]
+        # msg.pose.orientation.y = pose["orientation"]["y"]
+        # msg.pose.orientation.z = pose["orientation"]["z"]
+        # msg.pose.orientation.w = pose["orientation"]["w"]
 
-        msg = PoseStamped()
-        msg.header.frame_id = "board_link"
-        msg.pose.position.x = pose["position"]["x"]
-        msg.pose.position.y = pose["position"]["y"]
-        msg.pose.position.z = pose["position"]["z"]
-        msg.pose.orientation.x = pose["orientation"]["x"]
-        msg.pose.orientation.y = pose["orientation"]["y"]
-        msg.pose.orientation.z = pose["orientation"]["z"]
-        msg.pose.orientation.w = pose["orientation"]["w"]
+        # # convert to base_link frame
+        # msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
 
-        # convert to base_link frame
-        msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+        # # convert to kinova_pose
+        # kp = get_kinovapose_from_pose_stamped(msg_in_base)
 
-        # convert to kinova_pose
-        kp = get_kinovapose_from_pose_stamped(msg_in_base)
+        # success = self.arm.send_cartesian_pose(kp)
 
-        success = self.arm.send_cartesian_pose(kp)
+        # pose = rospy.get_param("~wind_poses/placing_traj/poses/pose11")
 
+        # msg = PoseStamped()
+        # msg.header.frame_id = "board_link"
+        # msg.pose.position.x = pose["position"]["x"]
+        # msg.pose.position.y = pose["position"]["y"]
+        # msg.pose.position.z = pose["position"]["z"]
+        # msg.pose.orientation.x = pose["orientation"]["x"]
+        # msg.pose.orientation.y = pose["orientation"]["y"]
+        # msg.pose.orientation.z = pose["orientation"]["z"]
+        # msg.pose.orientation.w = pose["orientation"]["w"]
+
+        # # convert to base_link frame
+        # msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+
+        # # convert to kinova_pose
+        # kp = get_kinovapose_from_pose_stamped(msg_in_base)
+
+        # success = self.arm.send_cartesian_pose(kp)
+        # self.arm.execute_gripper_command(0.2) 
+        # self.arm.execute_gripper_command(0.4) 
+        # self.arm.execute_gripper_command(0.2) 
         return success
     
+    def pick_probe_from_holder(self):
+        
+        # # go to the probe pick perceive position above the holder
+        self.arm.execute_gripper_command(0.0)
+
+        probe_place_in_holder_pose = rospy.get_param("~probe_action_poses/probe_place_in_holder_pose")
+
+        probe_place_in_holder_pose_kp = get_kinovapose_from_list(probe_place_in_holder_pose)
+
+        rospy.loginfo("[probe_action] moving to probe place holder position")
+
+        probe_place_in_holder_pose_kp.x -= 0.1
+        success = self.arm.send_cartesian_pose(probe_place_in_holder_pose_kp, max_lin_vel=0.05)
+        if not success:
+            rospy.logerr("[probe_action] Failed to move to the probe place holder position")
+            return False
+
+        probe_place_in_holder_pose_kp.x += 0.1
+        success = self.arm.send_cartesian_pose(probe_place_in_holder_pose_kp, max_lin_vel=0.05)
+        if not success:
+            rospy.logerr("[probe_action] Failed to move to the probe place holder position")
+            return False
+
+        # close the gripper
+        self.arm.execute_gripper_command(1.0)
+        
+        # move up a bit
+        probe_place_in_holder_pose_kp.z += 0.05
+
+        success = self.arm.send_cartesian_pose(probe_place_in_holder_pose_kp)
+
+        if not success:
+            rospy.logerr("[probe_action] Failed to move up the probe")
+            return False
+        
+        rospy.loginfo("[probe_action] probe picked")
+
+        return True
+
     def tuck_probe_into_board(self) -> bool:
         # TODO: implement with velocity control
         return True
