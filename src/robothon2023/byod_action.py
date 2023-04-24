@@ -21,10 +21,13 @@ class ByodAction(AbstractAction):
         self.tf_utils = transform_utils
         self.listener = tf.TransformListener()
 
+        self.multimeter_poses = rospy.get_param("~multimeter_poses")
+        self.joint_angles = rospy.get_param("~joint_angles")
+        self.byod_poses = rospy.get_param("~byod_poses")
+
         self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
         print("BYOD Action Initialized")
-        
-
+    
     def pre_perceive(self) -> bool:
         print ("in pre perceive")
         return True
@@ -34,10 +37,21 @@ class ByodAction(AbstractAction):
 
         print ("in act")
 
-        rospy.loginfo(">> Moving arm to slider <<")
-        success = self.get_poses_and_follow_trajactory()
+        # rospy.loginfo(">> Executing BYOD Trajectory <<")
+        # success = self.get_poses_and_follow_trajactory()
+        # if not success:
+        #     return False
+        
+        # rospy.loginfo(">> Rotate the Dial <<")
+        # success = self.arm.rotate_dial()
+        # if not success:
+        #     return False
+                
+        rospy.loginfo(">> Reading multimeter screen <<")
+        success = self.read_multimeter_screen()
         if not success:
             return False
+        
         return True
 
     def verify(self) -> bool:
@@ -46,14 +60,15 @@ class ByodAction(AbstractAction):
 
     def get_poses_and_follow_trajactory(self):
 
-        pose = rospy.get_param("~byod_poses")
+        pose = self.byod_poses
         pose_list = []
         for i in pose.values():
             pose_list.append(get_kinovapose_from_list(list(i.values())))
 
         #Go byod_pose in joint angles 
-
-        
+        success = self.arm.send_joint_angles(self.joint_angles["byod_safe_pose"])
+        if not success:
+            return False
 
         while not rospy.is_shutdown():
             for idx, i in enumerate(pose_list):
@@ -65,25 +80,16 @@ class ByodAction(AbstractAction):
                     if not success:
                         return False
                     rospy.sleep(1)
-                    self.arm.move_down_with_caution(force_threshold=[5,5,5], tool_z_thresh=0.079, velocity=0.01)
+                    success = self.arm.move_down_with_caution(force_threshold=[5,5,5], tool_z_thresh=0.079, velocity=0.01)
+                    if not success:
+                        return False
                     continue
 
                 if idx+1 == 5 or idx+1 == 13:
-                    # TODO : implement force based placing of probe
-                    i.z += 0.03
-                    success = self.arm.send_cartesian_pose(i)
+                    success = self.insert_probe(i)
                     if not success:
                         return False
-                    rospy.sleep(1)
-                    self.arm.move_down_with_caution(force_threshold=[4,4,4], tool_z_thresh=0.060, velocity= -0.01, approach_axis="y", retract=False) # neg because arm is moving in -y axis 
-                    
-                    rospy.sleep(1)
-                    success = self.arm.execute_gripper_command(0.60)
-                    if not success:
-                        return False
-                    rospy.loginfo(">> Opened Gripper <<")
-                    continue
-
+                   
                 success = self.arm.send_cartesian_pose(i)
                 if not success:
                     return False
@@ -108,34 +114,120 @@ class ByodAction(AbstractAction):
 
                 if idx == len(pose_list)-1 or rospy.is_shutdown():
                     break
+            if idx == len(pose_list)-1 or rospy.is_shutdown():
+                    break
         return True
+
+    def insert_probe(self,pose):
+
+        pose.z += 0.03
+
+        success = self.arm.send_cartesian_pose(pose)
+        if not success:
+            return False
+        rospy.sleep(0.5)
+
+        rospy.loginfo("Moving down with caution")
+        success = self.arm.move_down_with_caution(force_threshold=[4,4,4], tool_z_thresh=0.060, velocity= -0.01, approach_axis="y", retract=False) # neg because arm is moving in -y axis 
+        if not success:
+            return False
+        rospy.sleep(0.5)
+        rospy.loginfo(">> probe reached<<")
+        success = self.arm.execute_gripper_command(0.60)
+        if not success:
+            return False
+        rospy.loginfo(">>Opened Gripper<<")
+        return True
+
 
     def read_multimeter_screen(self):
 
-        pose = rospy.get_param("~multimeter_poses")    
+        pose = self.multimeter_poses   
 
-        pose_list = []
-        for i in pose.values():
-            pose_list.append(get_kinovapose_from_list(list(i.values())))
-        success = self.arm.send_cartesian_pose(pose_list[1]) # MULTIMETER POSE to read the screen 
+        # press red button
+        red_button_pose = pose["red_button_press"]
+        red_button_pose = get_kinovapose_from_list(list(red_button_pose))
+        red_button_pose.z += 0.05
+        success = self.arm.send_cartesian_pose(red_button_pose)
         if not success:
             return False
+        rospy.sleep(1)
+            # approach and press button 
+        success = self.arm.move_down_with_caution(force_threshold=[3,3,3], tool_z_thresh=0.045, velocity=0.01,retract=True)
+        if not success:
+            return False
+
+
+        # press white button
+        white_button_pose = pose["white_button_press"]
+        white_button_pose = get_kinovapose_from_list(list(white_button_pose))
+        white_button_pose.z += 0.05
+        success = self.arm.send_cartesian_pose(white_button_pose)
+        if not success:
+            return False
+        rospy.sleep(1)
+            # approach and press button 
+        success = self.arm.move_down_with_caution(force_threshold=[3,3,3], tool_z_thresh=0.045, velocity=0.01,retract=True)
+        if not success:
+            return False
+
+
+        # Read multimeter screen
+        screen_read_pose = pose["screen_read_pose"]
+        screen_read_pose = get_kinovapose_from_list(list(screen_read_pose))
+
+        success = self.arm.send_cartesian_pose(screen_read_pose)
+        if not success:
+            return False
+        rospy.sleep(1)
+
+        rospy.loginfo(">> Reading multimeter screen <<")
+        # read the screen and publish the value
+        # TODO: implement the screen reading and publishing the value
+
         
+    
         return True
 
     def rotate_dial(self):
 
-        pose = rospy.get_param("~multimeter_poses")    
+        pose = self.multimeter_poses
 
-        pose_list = []
-        for i in pose.values():
-            pose_list.append(get_kinovapose_from_list(list(i.values())))
-
-        success = self.arm.send_cartesian_pose(pose_list[0]) # MULTIMETER POSE above the dial
+        dial_align_pose = pose["dial_align_pose"]
+        dial_align_pose = get_kinovapose_from_list(list(dial_align_pose))
+        success = self.arm.send_cartesian_pose(dial_align_pose)
         if not success:
             return False
         rospy.sleep(1)
-        rospy.loginfo(">> multimeter reached<<")
+
+        # hold the dial
+        success = self.arm.execute_gripper_command(1.0)
+        if not success:
+            return False
+        rospy.sleep(1)
+
+        # rotate the dial 
+        # TODO: implement the dial rotation with velocity control
+
+        # release the dial
+        success = self.arm.execute_gripper_command(0.60)
+        if not success:
+            return False
+        rospy.sleep(1)
+
+        # go up
+        current_pose = self.arm.get_current_pose()
+        current_pose.z += 0.05
+        success = self.arm.send_cartesian_pose(current_pose)
+        if not success:
+            return False
+        rospy.sleep(1)
+
+        rospy.loginfo(">> Dial rotated successfully<<")
+
+        return True
+
+
 
 
 
