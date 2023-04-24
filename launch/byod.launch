@@ -6,5 +6,6 @@
 
     <node pkg="robothon2023" type="byod_test.py" name="byod_task" output="screen">
         <rosparam command="load" file="$(find robothon2023)/config/byod_poses.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/joint_angles.yaml"/>
     </node>
 </launch>
