@@ -26,7 +26,8 @@ class ForceMeasurmement:
         self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
         self._force = {'x': [], 
                        'y': [], 
-                       'z': []}
+                       'z': [],
+                       't_z': []}
 
         self._force_threshold = force_threshold 
         self.monitoring = False
@@ -38,10 +39,13 @@ class ForceMeasurmement:
         self._force['y'].append(msg.base.tool_external_wrench_force_y)
         self._force['z'].append(msg.base.tool_external_wrench_force_z)
 
+        self._force['t_z'].append(msg.base.tool_external_wrench_torque_z)
+
         if len(self._force['x']) > 10:
             self._force['x'].pop(0)
             self._force['y'].pop(0)
             self._force['z'].pop(0)
+            self._force['t_z'].pop(0)
         
             if self.monitoring:
                 self.force_check()
@@ -49,10 +53,12 @@ class ForceMeasurmement:
                     self._force['x'].clear()
                     self._force['y'].clear()
                     self._force['z'].clear()
+                    self._force['t_z'].clear()
             else:
                 self._force['x'].clear()
                 self._force['y'].clear()
                 self._force['z'].clear()
+                self._force['t_z'].clear()
         else:
             # rospy.logwarn("Force data not enough")
             pass
@@ -60,13 +66,14 @@ class ForceMeasurmement:
         
   # check if force is greater than threshold in continuous
 
-    def set_force_threshold(self, force):
+    def set_force_threshold(self, force, torque_z = 5):
         """
         Sets the force threshold
         Args:
             force (list): list of 3 floats, representing the force threshold in x, y, z directions
         """
         self._force_threshold = list(force)
+        self._force_threshold.append(torque_z)
 
     def force_check(self):
         """
@@ -79,20 +86,21 @@ class ForceMeasurmement:
 
         force_limit = self._force_threshold
 
-        force_accumulated = [0,0,0]
+        force_accumulated = [0,0,0,0]
 
         force_accumulated[0] = abs(np.mean(self._force['x']) - self._force['x'][-1])
         force_accumulated[1] = abs(np.mean(self._force['y']) - self._force['y'][-1])
         force_accumulated[2] = abs(np.mean(self._force['z']) - self._force['z'][-1])
+        force_accumulated[3] = abs(np.mean(self._force['t_z']) - self._force['t_z'][-1])
 
 
         yellow = "\033[93m"
 
-        data = [0,0,0]
+        data = [0,0,0,0]
 
         # convert list into dict
         force_dict = {}
-        idx = ['x', 'y', 'z']
+        idx = ['x', 'y', 'z', 't_z']
         for i, f in zip(idx,force_accumulated):
             force_dict[i] = f
 
@@ -112,8 +120,13 @@ class ForceMeasurmement:
             rospy.loginfo(yellow + "Force limit reached in z direction" + "\033[0m")
             rospy.loginfo(force_dict['z'])
             data[2] = 1
+        
+        if force_dict['t_z'] > force_limit[3]:
+            rospy.loginfo(yellow + "Force limit reached in rotation of Z" + "\033[0m")
+            rospy.loginfo(force_dict['t_z'])
+            data[3] = 1
 
-        if data[0] == 1 or data[1] == 1 or data[2] == 1:
+        if data[0] == 1 or data[1] == 1 or data[2] == 1 or data[3] == 1:
             self.set_force_limit_flag()
             # pass
         # if force_dict["x"] > 20 or force_dict["y"] > 20 or force_dict["z"] > 20:
@@ -144,16 +157,8 @@ class ForceMeasurmement:
         self.force_limit_flag = False
         return True 
     
-    
-
-
 if __name__ == "__main__":
-    
     pass
     
-    # rospy.init_node("force_monitoring", anonymous=True)
-    # fm = ForceMeasurmement()
-    # fm.enable_monitoring()
-    # rospy.spin()
 
 

@@ -386,7 +386,9 @@ class FullArmMovement:
         return True
     
     def move_down_with_caution(self, distance=0.05, time=6, velocity=None,
-                                force_threshold=[4,4,4],  tool_z_thresh=0.108,
+                                force_threshold=[4,4,4],  tool_z_thresh=0.095,
+                                approach_axis='z',
+                                retract = True,
                                 ref_frame=CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL):
         """
         Move the arm with caution using velocity and force monitoring
@@ -411,7 +413,14 @@ class FullArmMovement:
         # create twist command to move towards the slider
         approach_twist = TwistCommand()
         approach_twist.reference_frame = ref_frame
-        approach_twist.twist.linear_z = velocity
+
+        if approach_axis == 'x':
+            approach_twist.twist.linear_x = velocity
+        elif approach_axis == 'y':
+            approach_twist.twist.linear_y = velocity
+        elif approach_axis == 'z':
+            approach_twist.twist.linear_z = velocity
+
 
         dist_flag = False
 
@@ -421,6 +430,7 @@ class FullArmMovement:
             current_pose = self.get_current_pose()
             if self.fm.force_limit_flag or current_pose.z < tool_z_thresh:
                 dist_flag = True
+                rospy.logwarn("Distance limit in Z axis reached")
                 break
             self.cartesian_velocity_pub.publish(approach_twist)
             rate_loop.sleep()
@@ -431,17 +441,26 @@ class FullArmMovement:
         
         self.fm.disable_monitoring()
 
-        distance = 0.015 ; time = 1 # move back 8 mm
-        velocity = distance/time
+        if retract:
+            
+            distance = 0.015 ; time = 1 # move back 8 mm
+            velocity = distance/time
 
-        retract_twist = TwistCommand()
-        retract_twist.reference_frame = ref_frame
-        retract_twist.twist.linear_z = -velocity
-        if self.fm.force_limit_flag or dist_flag:
-            self.cartesian_velocity_pub.publish(retract_twist)
-            rospy.sleep(time)
-        
-        self.stop_arm_velocity()
+            retract_twist = TwistCommand()
+            retract_twist.reference_frame = ref_frame
+
+            if approach_axis == 'x':
+                retract_twist.twist.linear_x = -velocity
+            elif approach_axis == 'y':
+                retract_twist.twist.linear_y = -velocity
+            elif approach_axis == 'z':
+                retract_twist.twist.linear_z = -velocity
+
+            if self.fm.force_limit_flag or dist_flag:
+                self.cartesian_velocity_pub.publish(retract_twist)
+                rospy.sleep(time)
+            
+            self.stop_arm_velocity()
         return True
     
     def move_with_velocity(self, distance, time, direction, velocity=None, ref_frame=CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL):
