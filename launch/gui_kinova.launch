@@ -15,6 +15,7 @@
         <rosparam command="load" file="$(find robothon2023)/config/trajectories.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/winding_poses.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/byod_poses.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/probe_action.yaml"/>
     </node>
 
 </launch>

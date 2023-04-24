@@ -172,6 +172,7 @@ class RobothonTask(object):
     def __init__(self):
         self.joint_angles = rospy.get_param("~joint_angles", None)
         self.trajectories = rospy.get_param("~trajectories", None)
+        self.probe_action_poses = rospy.get_param("~probe_action_poses", None)
         self.wind_cable_poses = rospy.get_param("~wind_poses", None)
         self.byod_poses = rospy.get_param("~byod_poses", None)
 
@@ -226,6 +227,23 @@ class RobothonTask(object):
 
         byod_poses_window = ListWindow(frame, 'byod poses', byod_poses_list, self.byod_poses_cb)
         byod_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # probe action poses
+        probe_action_poses = [(pose, get_kinovapose_from_list(self.probe_action_poses[pose])) for pose in self.probe_action_poses.keys()]
+
+        probe_action_poses_list = ItemList()
+        probe_action_poses_list.add_items(probe_action_poses)
+
+        probe_action_poses_window = ListWindow(frame, 'probe action poses', probe_action_poses_list, self.probe_action_poses_cb)
+        probe_action_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    def probe_action_poses_cb(self, item: Item):
+
+        pose = item.value
+        success = self.arm.send_cartesian_pose(pose)
+
+        # display popup window to inform user
+        messagebox.showinfo("Probe Action Pose", "Probe Action Pose sent to robot")
 
     def byod_poses_cb(self, item: Item):
 
@@ -360,30 +378,34 @@ class RobothonTask(object):
         # Function to update the current tool tip pose in three formats
         # Get the current tool tip pose
         current_pose = self.arm.get_current_pose()
+        cp_list = current_pose.to_list()
 
         rospy.loginfo('got current pose')
 
         cp_bl = current_pose.to_pose_stamped()
         cp_in_board_frame = self.transform_utils.transformed_pose_with_retries(cp_bl, "board_link")
 
-        cp_in_bf_pos = cp_in_board_frame.pose.position
-        cp_in_bf_ori = cp_in_board_frame.pose.orientation
+        if cp_in_board_frame is not None:
+            cp_in_bf_pos = cp_in_board_frame.pose.position
+            cp_in_bf_ori = cp_in_board_frame.pose.orientation
 
-        cp_in_bf = [cp_in_bf_pos.x, cp_in_bf_pos.y, cp_in_bf_pos.z, cp_in_bf_ori.x, cp_in_bf_ori.y, cp_in_bf_ori.z, cp_in_bf_ori.w]
+            cp_in_bf = [cp_in_bf_pos.x, cp_in_bf_pos.y, cp_in_bf_pos.z, cp_in_bf_ori.x, cp_in_bf_ori.y, cp_in_bf_ori.z, cp_in_bf_ori.w]
 
-        rospy.loginfo('got current pose in board frame')
+            rospy.loginfo('got current pose in board frame')
+        else:
+            cp_in_bf = 'Could not get pose in board frame, check tf tree'
 
         # get joint angles from joint state publisher
         # TODO: change the topic 
         msg: JointState = rospy.wait_for_message("/my_gen3/base_feedback/joint_state", JointState)
-        joint_angles = msg.position
+        joint_angles = [math.degrees(angle) for angle in msg.position]
 
         rospy.loginfo('got joint angles')
         
         # Update the text boxes with the current pose
         self.base_frame_text.config(state='normal')
         self.base_frame_text.delete('1.0', tk.END)
-        self.base_frame_text.insert(tk.END, current_pose)
+        self.base_frame_text.insert(tk.END, str(cp_list))
         self.base_frame_text.config(state='disabled')
 
         self.board_frame_text.config(state='normal')
