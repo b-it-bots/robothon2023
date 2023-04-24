@@ -340,9 +340,10 @@ class ProbeAction(AbstractAction):
             for pose in pose_list:
                 pose.x += x_offset 
                 pose.y += y_offset
-    
+
+        rospy.sleep(1.0) # wait for the arm to settle for proper force sensing
         # velocity mode to approach the door knob
-        success = self.arm.move_down_with_caution(velocity=0.01, force_threshold=[4,4,4])
+        success = self.arm.move_down_with_caution(velocity=0.01, force_threshold=[4,4,2.5])
 
         if not success:
             rospy.logerr("Failed to move down the arm")
@@ -363,6 +364,20 @@ class ProbeAction(AbstractAction):
         if not success:
             rospy.logerr("Failed to reach desired pose")
             return False
+        
+        success = self.arm.execute_gripper_command(0.50) # 0.75 closed
+        if not success:
+            rospy.logerr("Failed to open the gripper")
+            return False
+        
+        # move up a bit
+        current_pose = self.arm.get_current_pose()
+        current_pose.z += 0.07 
+
+        success = self.arm.send_cartesian_pose(current_pose)
+        if success:
+            rospy.loginfo("Door knob opened successfully")
+
         return success
    
     def pick_probe_from_holder(self):

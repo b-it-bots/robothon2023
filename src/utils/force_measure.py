@@ -94,6 +94,9 @@ class ForceMeasurmement:
         force_accumulated[3] = abs(np.mean(self._force['t_z']) - self._force['t_z'][-1])
 
 
+        # print("Force accumulated in Z --> : ", force_accumulated[2])
+
+
         yellow = "\033[93m"
 
         data = [0,0,0,0]
@@ -127,6 +130,8 @@ class ForceMeasurmement:
             data[3] = 1
 
         if data[0] == 1 or data[1] == 1 or data[2] == 1 or data[3] == 1:
+
+            # rospy.loginfo(yellow + " =================>>>> Force FLAG SET" + "\033[0m")
             self.set_force_limit_flag()
             # pass
         # if force_dict["x"] > 20 or force_dict["y"] > 20 or force_dict["z"] > 20:
