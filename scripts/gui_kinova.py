@@ -14,6 +14,7 @@ import tkinter as Tkinter
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
+import pyperclip
 
 import geometry_msgs.msg
 import rospy
@@ -113,11 +114,15 @@ class ItemList:
         return iter(self.items)
 
 class ListWindow(tk.Frame):
-    def __init__(self, master, items: ItemList, callback):
+    def __init__(self, master: tk.Frame, name, items: ItemList, callback):
         super().__init__(master)
         self.master = master
         self.items = items
         self.callback = callback
+
+        # Set listbox title
+        self.title = ttk.Label(self, text=name)
+        self.title.pack(padx=10, pady=10)
 
         # Create listbox with a scrollbar
         self.listbox = tk.Listbox(self, width=30)
@@ -168,11 +173,20 @@ class RobothonTask(object):
         self.joint_angles = rospy.get_param("~joint_angles", None)
         self.trajectories = rospy.get_param("~trajectories", None)
         self.wind_cable_poses = rospy.get_param("~wind_poses", None)
+        self.byod_poses = rospy.get_param("~byod_poses", None)
 
-        self.lists = [self.joint_angles, self.trajectories, self.wind_cable_poses]
+        self.lists = [self.joint_angles, self.trajectories, self.wind_cable_poses, self.byod_poses]
 
         self.arm = FullArmMovement()
         self.transform_utils = TransformUtils()
+
+         # clear faults
+        self.arm.clear_faults()
+        self.arm.subscribe_to_a_robot_notification()
+
+        self.master = tk.Tk()  # Updated to use tk instead of Tkinter
+        self.master.title("Kinova Arm GUI")
+        self.master.geometry("1500x2000")
 
     def render_lists(self, frame: tk.Frame):
         joint_angles = [(joint_angle, self.joint_angles[joint_angle]) for joint_angle in self.joint_angles.keys()]
@@ -180,7 +194,7 @@ class RobothonTask(object):
         joint_anlges_list = ItemList()
         joint_anlges_list.add_items(joint_angles)
 
-        joint_angles_window = ListWindow(frame, joint_anlges_list, self.joint_angles_cb)
+        joint_angles_window = ListWindow(frame, 'joint angles', joint_anlges_list, self.joint_angles_cb)
         joint_angles_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         trajectories = [(trajectory, self.trajectories[trajectory]) for trajectory in self.trajectories.keys()]
@@ -188,7 +202,7 @@ class RobothonTask(object):
         trajectories_list = ItemList()
         trajectories_list.add_items(trajectories)
 
-        trajectories_window = ListWindow(frame, trajectories_list, self.trajectories_cb)
+        trajectories_window = ListWindow(frame, 'trajectories', trajectories_list, self.trajectories_cb)
         trajectories_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # get the poses from trajectories
@@ -199,18 +213,27 @@ class RobothonTask(object):
         wind_cable_poses_list = ItemList()
         wind_cable_poses_list.add_items(wind_cable_poses)
         
-        wind_cable_poses_window = ListWindow(frame, wind_cable_poses_list, self.wind_cable_poses_cb)
-        wind_cable_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)    
+        wind_cable_poses_window = ListWindow(frame, 'winding poses', wind_cable_poses_list, self.wind_cable_poses_cb)
+        wind_cable_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-    def send_joint_angle_listing(self, event):
-        '''
-        Get users selection and print to terminal.
-        '''
-        # Get the selected item in the listbox
-        selected_item = event.widget.get(event.widget.curselection())
-        print(selected_item)
-        print (self.selected_value)
-        pass
+        # get byod poses
+        byod_poses = []
+        for key, i in zip(self.byod_poses.keys(), self.byod_poses.values()):
+            byod_poses.append((key, get_kinovapose_from_list(list(i.values()))))
+
+        byod_poses_list = ItemList()
+        byod_poses_list.add_items(byod_poses)
+
+        byod_poses_window = ListWindow(frame, 'byod poses', byod_poses_list, self.byod_poses_cb)
+        byod_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+    def byod_poses_cb(self, item: Item):
+
+        kp = item.value   
+        success = self.arm.send_cartesian_pose(kp)
+
+        # display popup window to inform user
+        messagebox.showinfo("Byod Pose", "Byod Pose sent to robot")
 
     def joint_angles_cb(self, item: Item):
         
@@ -241,6 +264,37 @@ class RobothonTask(object):
         # display popup window to inform user
         messagebox.showinfo("Wind Cable Pose", "Wind Cable Pose sent to robot")
 
+    def gripper_command_window(self, frame: tk.Frame):
+        # create a heading for the frame
+        self.heading = tk.Label(frame, text="Gripper Command", font=("Helvetica", 14))
+        self.heading.grid(row=0, column=0, padx=10, pady=10, sticky="w") 
+
+        self.open_button = tk.Button(frame, text="Open", command=lambda: self.gripper_cb(0.0))
+
+        self.close_button = tk.Button(frame, text="Close", command=lambda: self.gripper_cb(1.0))
+
+        self.gripper_value = tk.DoubleVar()
+        self.gripper_value.set(0.0)
+
+        self.gripper_value_entry = tk.Entry(frame, textvariable=self.gripper_value)
+
+        self.gripper_value_button = tk.Button(frame, text="Send", command=lambda: self.gripper_cb(self.gripper_value.get()))
+
+        # add all the widgets in one row 
+        # make the widgets move based on the window size
+        self.open_button.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")
+        self.close_button.grid(row=1, column=1, padx=10, pady=10, sticky="nsew")
+        self.gripper_value_entry.grid(row=1, column=2, padx=10, pady=10, sticky="nsew")
+        self.gripper_value_button.grid(row=1, column=3, padx=10, pady=10, sticky="nsew")
+
+        # configure column widths to be equal
+        frame.grid_columnconfigure(0, weight=1)
+        frame.grid_columnconfigure(1, weight=1)
+        frame.grid_columnconfigure(2, weight=1)
+        frame.grid_columnconfigure(3, weight=1)
+
+    def gripper_cb(self, value):
+        self.arm.execute_gripper_command(value)
 
     def current_pose_window(self, frame: tk.Frame):
         # Create a heading for the frame
@@ -248,26 +302,45 @@ class RobothonTask(object):
         self.heading.grid(row=0, column=0, padx=10, pady=10)
 
         # Create a text box to display the current tool tip pose in base frame
-        # make the text box expand width based on the window size
-        self.base_frame_text = tk.Text(frame, height=2, width=30, font=("Helvetica", 12))
-        self.base_frame_text.grid(row=1, column=0, padx=10, pady=10, sticky="ew")
+        self.base_frame_label = tk.Label(frame, text="Base Frame", font=("Helvetica", 10))
+        self.base_frame_label.grid(row=1, column=0, padx=10, pady=10, sticky="w")
+
+        self.base_frame_text = tk.Text(frame, height=3, width=30, font=("Helvetica", 10))
+        self.base_frame_text.grid(row=2, column=0, padx=10, pady=10, sticky="ew")
         self.base_frame_text.config(state='disabled')
+        self.base_frame_text.configure()
+
+        # Create a copy button for the base frame text
+        self.copy_base_frame_button = ttk.Button(frame, text="Copy", command=lambda: self.copy_to_clipboard(self.base_frame_text.get("1.0", "end-1c")))
+        self.copy_base_frame_button.grid(row=2, column=1, padx=10, pady=10)
 
         # Create a text box to display the current tool tip pose in board frame
-        # make the text box expand width based on the window size
-        self.board_frame_text = tk.Text(frame, height=2, width=30, font=("Helvetica", 12))
-        self.board_frame_text.grid(row=2, column=0, padx=10, pady=10, sticky="ew")
+        self.board_frame_label = tk.Label(frame, text="Board Frame", font=("Helvetica", 10))
+        self.board_frame_label.grid(row=3, column=0, padx=10, pady=10, sticky="w")
+
+        self.board_frame_text = tk.Text(frame, height=3, width=30, font=("Helvetica", 10))
+        self.board_frame_text.grid(row=4, column=0, padx=10, pady=10, sticky="ew")
         self.board_frame_text.config(state='disabled')
 
-        # Create a text box to display the current tool tip pose in joint frame
-        # make the text box expand width based on the window size
-        self.joint_angles_text = tk.Text(frame, height=2, width=30, font=("Helvetica", 12))
-        self.joint_angles_text.grid(row=3, column=0, padx=10, pady=10, sticky="ew")
+        # Create a copy button for the board frame text
+        self.copy_board_frame_button = ttk.Button(frame, text="Copy", command=lambda: self.copy_to_clipboard(self.board_frame_text.get("1.0", "end-1c")))
+        self.copy_board_frame_button.grid(row=4, column=1, padx=10, pady=10)
+
+        # Create a text box to display the current tool tip pose in joint angles
+        self.joint_angles_label = tk.Label(frame, text="Joint Angles", font=("Helvetica", 10))
+        self.joint_angles_label.grid(row=5, column=0, padx=10, pady=10, sticky="w")
+
+        self.joint_angles_text = tk.Text(frame, height=3, width=30, font=("Helvetica", 10))
+        self.joint_angles_text.grid(row=6, column=0, padx=10, pady=10, sticky="ew")
         self.joint_angles_text.config(state='disabled')
+
+        # Create a copy button for the joint angles text
+        self.copy_joint_angles_button = ttk.Button(frame, text="Copy", command=lambda: self.copy_to_clipboard(self.joint_angles_text.get("1.0", "end-1c")))
+        self.copy_joint_angles_button.grid(row=6, column=1, padx=10, pady=10)
 
         # Create an update button
         self.update_button = ttk.Button(frame, text="Update", command=self.update_tool_tip_pose)
-        self.update_button.grid(row=4, column=0, padx=10, pady=10, columnspan=2) 
+        self.update_button.grid(row=7, column=0, padx=10, pady=10, columnspan=2) 
 
         # Set button style
         style = ttk.Style()
@@ -278,17 +351,34 @@ class RobothonTask(object):
         
         frame.grid_columnconfigure(0, weight=1)
 
+    def copy_to_clipboard(self, text):
+        # Function to copy text to the clipboard
+        self.master.clipboard_clear()
+        self.master.clipboard_append(text)
+
     def update_tool_tip_pose(self):
         # Function to update the current tool tip pose in three formats
         # Get the current tool tip pose
         current_pose = self.arm.get_current_pose()
 
-        cp_kp = get_kinovapose_from_list(current_pose)
-        cp_in_board_frame = self.transform_utils.transformed_pose_with_retries(cp_kp, "board_link")
+        rospy.loginfo('got current pose')
+
+        cp_bl = current_pose.to_pose_stamped()
+        cp_in_board_frame = self.transform_utils.transformed_pose_with_retries(cp_bl, "board_link")
+
+        cp_in_bf_pos = cp_in_board_frame.pose.position
+        cp_in_bf_ori = cp_in_board_frame.pose.orientation
+
+        cp_in_bf = [cp_in_bf_pos.x, cp_in_bf_pos.y, cp_in_bf_pos.z, cp_in_bf_ori.x, cp_in_bf_ori.y, cp_in_bf_ori.z, cp_in_bf_ori.w]
+
+        rospy.loginfo('got current pose in board frame')
 
         # get joint angles from joint state publisher
-        msg = rospy.wait_for_message("/joint_states", JointState)
+        # TODO: change the topic 
+        msg: JointState = rospy.wait_for_message("/my_gen3/base_feedback/joint_state", JointState)
         joint_angles = msg.position
+
+        rospy.loginfo('got joint angles')
         
         # Update the text boxes with the current pose
         self.base_frame_text.config(state='normal')
@@ -298,38 +388,46 @@ class RobothonTask(object):
 
         self.board_frame_text.config(state='normal')
         self.board_frame_text.delete('1.0', tk.END)
-        self.board_frame_text.insert(tk.END, cp_in_board_frame)
+        self.board_frame_text.insert(tk.END, str(cp_in_bf))
         self.board_frame_text.config(state='disabled')
 
         self.joint_angles_text.config(state='normal')
         self.joint_angles_text.delete('1.0', tk.END)
-        self.joint_angles_text.insert(tk.END, joint_angles)
+        self.joint_angles_text.insert(tk.END, str(joint_angles))
         self.joint_angles_text.config(state='disabled')
 
     def create_window(self):
-        master = tk.Tk()  # Updated to use tk instead of Tkinter
-        master.title("Kinova Arm GUI")
-        master.geometry("1000x1000")
+        
 
-        lists_frame = tk.Frame(master)
+        lists_frame = tk.Frame(self.master)
         lists_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")  # Updated to use grid manager
-        master.grid_rowconfigure(0, weight=2)  # Configure row 0 to take twice the height
+        self.master.grid_rowconfigure(0, weight=1)  # Configure row 0 to take normal height
 
         # Create and configure the window's contents
         self.render_lists(lists_frame)
 
-        pose_frame = tk.Frame(master)
-        pose_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")  # Updated to use grid manager
-        master.grid_rowconfigure(1, weight=1)  # Configure row 1 to take normal height
+        gripper_frame = tk.Frame(self.master)
+        gripper_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")  # Updated to use grid manager
+        self.master.grid_rowconfigure(1, weight=0)  # Configure row 1 to take no height
+
+        self.gripper_command_window(gripper_frame)
+
+        pose_frame = tk.Frame(self.master)
+        pose_frame.grid(row=2, column=0, padx=10, pady=10, sticky="nsew")  # Updated to use grid manager
+        self.master.grid_rowconfigure(2, weight=0)  # Configure row 2 to take no height
 
         # Call the current_pose_window method with the pose_frame as the parent
         self.current_pose_window(pose_frame)
 
         # Configure the columns to take 100% width
-        master.grid_columnconfigure(0, weight=1)
+        self.master.grid_columnconfigure(0, weight=1)
 
-        master.mainloop()
+        t = threading.Thread(target=self.master.mainloop())
+        t.daemon = True
+        t.start()
+
         rospy.signal_shutdown("GUI closed")
+
 
 
 if __name__ == "__main__":
