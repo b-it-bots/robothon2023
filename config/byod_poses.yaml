@@ -1,0 +1,153 @@
+byod_poses:
+  pose1:
+    tool_pose_x: 0.4584057927131653
+    tool_pose_y: -0.22635021805763245
+    tool_pose_z: 0.06467433273792267
+    tool_pose_theta_x: -88.80650329589844
+    tool_pose_theta_y: 178.17117309570312
+    tool_pose_theta_z: 179.9242706298828
+
+  pose2:
+    tool_pose_x: 0.458379328250885
+    tool_pose_y: -0.33480164408683777
+    tool_pose_z: 0.06462594866752625
+    tool_pose_theta_x: -88.80232238769531
+    tool_pose_theta_y: 178.17318725585938
+    tool_pose_theta_z: 179.9225616455078
+
+  pose3:
+    tool_pose_x: 0.45839694142341614
+    tool_pose_y: -0.33483853936195374
+    tool_pose_z: 0.2279796600341797
+    tool_pose_theta_x: -88.80789184570312
+    tool_pose_theta_y: 178.17848205566406
+    tool_pose_theta_z: 179.9188232421875
+
+  pose4:
+    tool_pose_x: 0.33289963006973267
+    tool_pose_y: -0.3346819281578064
+    tool_pose_z: 0.21600310504436493
+    tool_pose_theta_x: -88.81063842773438
+    tool_pose_theta_y: 178.1734619140625
+    tool_pose_theta_z: 179.91879272460938
+
+  pose5:
+    tool_pose_x: 0.3328438699245453
+    tool_pose_y: -0.33467647433280945
+    tool_pose_z: 0.06245880946516991
+    tool_pose_theta_x: -88.8042984008789
+    tool_pose_theta_y: 178.16920471191406
+    tool_pose_theta_z: 179.91407775878906
+
+  pose6:
+    tool_pose_x: 0.3328404724597931
+    tool_pose_y: -0.21283510327339172
+    tool_pose_z: 0.06248904764652252
+    tool_pose_theta_x: -88.80784606933594
+    tool_pose_theta_y: 178.16964721679688
+    tool_pose_theta_z: 179.91357421875
+
+  pose7:
+    tool_pose_x: 0.4155639708042145
+    tool_pose_y: -0.21032994985580444
+    tool_pose_z: 0.06250956654548645
+    tool_pose_theta_x: -88.81053161621094
+    tool_pose_theta_y: 178.15936279296875
+    tool_pose_theta_z: 179.91693115234375
+
+  pose8:
+    tool_pose_x: 0.41676783561706543
+    tool_pose_y: -0.33307942748069763
+    tool_pose_z: 0.061698634177446365
+    tool_pose_theta_x: -88.83712768554688
+    tool_pose_theta_y: 178.14736938476562
+    tool_pose_theta_z: 179.9136962890625
+
+  pose9:
+    tool_pose_x: 0.4168075919151306
+    tool_pose_y: -0.33309391140937805
+    tool_pose_z: 0.11591383069753647
+    tool_pose_theta_x: -88.8411865234375
+    tool_pose_theta_y: 178.15322875976562
+    tool_pose_theta_z: 179.9150390625
+
+  pose10:
+    tool_pose_x: 0.41677916049957275
+    tool_pose_y: -0.2177562415599823
+    tool_pose_z: 0.12153730541467667
+    tool_pose_theta_x: -88.84363555908203
+    tool_pose_theta_y: 178.1405792236328
+    tool_pose_theta_z: 179.9192657470703
+
+  pose11:
+    tool_pose_x: 0.32364895939826965
+    tool_pose_y: -0.21776768565177917
+    tool_pose_z: 0.12160061299800873
+    tool_pose_theta_x: -88.84999084472656
+    tool_pose_theta_y: 178.146484375
+    tool_pose_theta_z: 179.9181365966797
+
+  pose12:
+    tool_pose_x: 0.3194999396800995
+    tool_pose_y: -0.3178297281265259
+    tool_pose_z: 0.13306336104869843
+    tool_pose_theta_x: -88.84858703613281
+    tool_pose_theta_y: 178.14141845703125
+    tool_pose_theta_z: 179.92352294921875
+
+  pose13:
+    tool_pose_x: 0.3194552958011627
+    tool_pose_y: -0.31783628463745117
+    tool_pose_z: 0.06233309954404831
+    tool_pose_theta_x: -88.84590148925781
+    tool_pose_theta_y: 178.13677978515625
+    tool_pose_theta_z: 179.9215850830078
+
+  pose14:
+    tool_pose_x: 0.31946372985839844
+    tool_pose_y: -0.21625885367393494
+    tool_pose_z: 0.0623641163110733
+    tool_pose_theta_x: -88.84809875488281
+    tool_pose_theta_y: 178.1345977783203
+    tool_pose_theta_z: 179.92320251464844
+
+  pose15:
+    tool_pose_x: 0.5515867471694946
+    tool_pose_y: -0.21626916527748108
+    tool_pose_z: 0.15486903488636017
+    tool_pose_theta_x: -88.85403442382812
+    tool_pose_theta_y: 178.1358184814453
+    tool_pose_theta_z: 179.9187774658203
+
+  pose16: # button above for 1
+    tool_pose_x: 0.5349587202072144
+    tool_pose_y: -0.3463917374610901
+    tool_pose_z: 0.15054214000701904
+    tool_pose_theta_x: -177.63455200195312
+    tool_pose_theta_y: -2.2661216259002686
+    tool_pose_theta_z: 2.991630792617798
+
+  pose17: # button press 1
+    tool_pose_x: 0.5349900126457214
+    tool_pose_y: -0.3463965654373169
+    tool_pose_z: 0.08243076503276825
+    tool_pose_theta_x: -177.63656616210938
+    tool_pose_theta_y: -2.2726542949676514
+    tool_pose_theta_z: 2.989549398422241
+
+  pose18: # button above for 2
+    tool_pose_x: 0.5350046753883362
+    tool_pose_y: -0.3724484443664551
+    tool_pose_z: 0.1718117594718933
+    tool_pose_theta_x: -177.6378631591797
+    tool_pose_theta_y: -2.2770516872406006
+    tool_pose_theta_z: 2.982877731323242
+
+  pose19: # button press 2
+    tool_pose_x: 0.5349997878074646
+    tool_pose_y: -0.37238776683807373
+    tool_pose_z: 0.0802338570356369
+    tool_pose_theta_x: -177.63577270507812
+    tool_pose_theta_y: -2.277101516723633
+    tool_pose_theta_z: 2.995504140853882
+

@@ -13,7 +13,8 @@
         <rosparam command="load" file="$(find robothon2023)/config/boundary_safety.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/task_params.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/trajectories.yaml"/>
-        <rosparam command="load" file="$(find robothon2023)/config/wind_cable_poses.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/winding_poses.yaml"/>
+        <rosparam command="load" file="$(find robothon2023)/config/byod_poses.yaml"/>
     </node>
 
 </launch>
