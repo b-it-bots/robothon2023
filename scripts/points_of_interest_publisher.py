@@ -27,20 +27,24 @@ class PointsOfInterestPublisher(object):
         self.event_out_pub = rospy.Publisher('~board_detector_event_out', std_msgs.msg.String, queue_size=1)
 
         self.num_detections_of_board = rospy.get_param('/task_board_detector/num_detections_of_board')
-        board_to_blue_button = rospy.get_param("~board_to_blue_button")
-        board_to_red_button = rospy.get_param("~board_to_red_button")
-        board_to_slider_start = rospy.get_param("~board_to_slider_start")
-        board_to_slider_end = rospy.get_param("~board_to_slider_end")
-        board_to_meter_plug_black = rospy.get_param("~board_to_meter_plug_black")
-        board_to_meter_plug_red = rospy.get_param("~board_to_meter_plug_red")
-        board_to_door_knob = rospy.get_param("~board_to_door_knob")
-        board_to_gui = rospy.get_param("~board_to_gui")
-        board_to_probe_initial = rospy.get_param("~board_to_probe_initial")
-        board_to_wind_cable = rospy.get_param("~board_to_wind_cable")
-        board_to_probe_point = rospy.get_param("~board_to_probe_point")
+        # board_to_blue_button = rospy.get_param("~board_to_blue_button")
+        # board_to_red_button = rospy.get_param("~board_to_red_button")
+        # board_to_slider_start = rospy.get_param("~board_to_slider_start")
+        # board_to_slider_end = rospy.get_param("~board_to_slider_end")
+        # board_to_meter_plug_black = rospy.get_param("~board_to_meter_plug_black")
+        # board_to_meter_plug_red = rospy.get_param("~board_to_meter_plug_red")
+        # board_to_door_knob = rospy.get_param("~board_to_door_knob")
+        # board_to_gui = rospy.get_param("~board_to_gui")
+        # board_to_probe_initial = rospy.get_param("~board_to_probe_initial")
+        # board_to_wind_cable = rospy.get_param("~board_to_wind_cable")
+        # board_to_probe_point = rospy.get_param("~board_to_probe_point")
 
-        self.all_transforms = [board_to_blue_button, board_to_red_button, board_to_slider_start, board_to_slider_end, board_to_meter_plug_black, board_to_meter_plug_red, board_to_door_knob, board_to_gui, board_to_wind_cable, board_to_probe_point]
-        self.all_link_names = ['blue_button', 'red_button', 'slider_start', 'slider_end', 'meter_plug_black', 'meter_plug_red', 'door_knob', 'gui', 'wind_cable', 'probe_point']
+        # self.all_transforms = [board_to_blue_button, board_to_red_button, board_to_slider_start, board_to_slider_end, board_to_meter_plug_black, board_to_meter_plug_red, board_to_door_knob, board_to_gui, board_to_wind_cable, board_to_probe_point]
+        # self.all_link_names = ['blue_button', 'red_button', 'slider_start', 'slider_end', 'meter_plug_black', 'meter_plug_red', 'door_knob', 'gui', 'wind_cable', 'probe_point']
+
+        # TODO: test this
+        self.all_transforms, self.all_link_names = self.get_all_transforms_and_link_names()
+
         ns = '/task_board_detector/'
         self.pose_publishers = []
         for name in self.all_link_names:
@@ -91,7 +95,7 @@ class PointsOfInterestPublisher(object):
                                                    0.0),
                                                    (quat[0], quat[1], quat[2], quat[3]),
                                                    rospy.Time.now(),
-                                                   link_name + '_link',
+                                                   link_name,
                                                    "board_link")
                 pose = geometry_msgs.msg.PoseStamped()
                 pose.pose.position.x = offset[0]
@@ -130,6 +134,24 @@ class PointsOfInterestPublisher(object):
         med_pose.pose.orientation.w = quat[3]
         med_pose.header.frame_id = 'base_link'
         return med_pose
+    
+    def get_all_transforms_and_link_names(self):
+        '''
+        Reads the fixed_transforms parameter and 
+        returns a list of the transforms and a list of the link names
+        '''
+        all_transforms = []
+        all_link_names = []
+        fixed_transforms = rospy.get_param('~fixed_transforms')
+        
+        for link_name in fixed_transforms:
+            vals = fixed_transforms[link_name]
+            all_transforms.append(vals)
+            # strip the board_to_ prefix
+            link_name = link_name.replace('board_to_', '') + '_link'
+            all_link_names.append(link_name)
+
+        return all_transforms, all_link_names
 
 def main():
     rospy.init_node("points_of_interest_publisher")
