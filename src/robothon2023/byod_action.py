@@ -51,6 +51,10 @@ class ByodAction(AbstractAction):
         for i in pose.values():
             pose_list.append(get_kinovapose_from_list(list(i.values())))
 
+        #Go byod_pose in joint angles 
+
+        
+
         while not rospy.is_shutdown():
             for idx, i in enumerate(pose_list):
 
@@ -107,13 +111,32 @@ class ByodAction(AbstractAction):
         return True
 
     def read_multimeter_screen(self):
-        pass
+
+        pose = rospy.get_param("~multimeter_poses")    
+
+        pose_list = []
+        for i in pose.values():
+            pose_list.append(get_kinovapose_from_list(list(i.values())))
+        success = self.arm.send_cartesian_pose(pose_list[1]) # MULTIMETER POSE to read the screen 
+        if not success:
+            return False
+        
+        return True
 
     def rotate_dial(self):
 
-        
+        pose = rospy.get_param("~multimeter_poses")    
 
-        pass
+        pose_list = []
+        for i in pose.values():
+            pose_list.append(get_kinovapose_from_list(list(i.values())))
+
+        success = self.arm.send_cartesian_pose(pose_list[0]) # MULTIMETER POSE above the dial
+        if not success:
+            return False
+        rospy.sleep(1)
+        rospy.loginfo(">> multimeter reached<<")
+
 
 
 
