@@ -13,3 +13,6 @@ probe_holder_pose: [0.5991508364677429, -0.01071108877658844, 0.1258376836776733
 probe_holder_pick_perceive_pose: [TODO]
 probe_pre_pick_from_holder_pose: [TODO]
 perceive_board_pose: [0.4634, 0.1357, 0.432, -180.0, 0.0, 153.0]
+# plug insertion
+plug_insertion_height_threshold: 0.125 # if we go below this height, we've inserted the plug
+max_insert_retries: 5 # number of times to retry inserting plug if we don't succeed

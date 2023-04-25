@@ -96,12 +96,16 @@ class PlugRemoveSlidAction(AbstractAction):
         self.move_forward()
         inserted = False
         retries = 0
+        max_insert_retries = rospy.get_param('~max_insert_retries', 5)
         while not inserted:
-            self.run_visual_servoing(self.align_red_port, run=True)
+            self.run_visual_servoing(self.align_red_port, save_debug_images=False, run=True)
             inserted = self.move_down_insert()
             retries += 1
-            if retries > 5:
+            if retries > max_insert_retries:
                 break
+        if not inserted:
+            # if we haven't inserted the plug, release it
+            self.arm.execute_gripper_command(0.3)
         return True
 
     def verify(self) -> bool:
@@ -294,14 +298,14 @@ class PlugRemoveSlidAction(AbstractAction):
         self.img_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
         return error_x, error_y
         
-    def align_red_port(self):
+    def align_red_port(self, save_debug_images=False):
         min_x = 200
         max_x = 1000
         min_y = 100
         max_y = 520
         ## These are targets when tool_pose_z = approx 0.148 m
         target_x = 570
-        target_y = 310
+        target_y = 318
         color_img = self.image[min_y:max_y, min_x:max_x]
         img = cv2.cvtColor(color_img, cv2.COLOR_BGR2GRAY)
         mask = cv2.GaussianBlur(img, (3, 3), sigmaX=33)
@@ -433,6 +437,7 @@ class PlugRemoveSlidAction(AbstractAction):
         linear_vel_z = rospy.get_param("~linear_vel_z", 0.005)
         force_z_diff_threshold = 10.0
         force_control_loop_rate = rospy.Rate(rospy.get_param("~force_control_loop_rate", 10.0))
+        plug_insertion_height_threshold = rospy.get_param("~plug_insertion_height_threshold", 0.125)
         stop = False
         self.current_force_z = []
         num_retries = 0
@@ -457,7 +462,8 @@ class PlugRemoveSlidAction(AbstractAction):
                 break
             force_control_loop_rate.sleep()
         inserted_plug = False
-        if self.current_height < 0.120: # we've definitely inserted the plug
+        if self.current_height < plug_insertion_height_threshold: # we've definitely inserted the plug
+            rospy.loginfo("Height threshold reached; we have inserted the plug")
             inserted_plug = True
             self.arm.execute_gripper_command(0.3) #open gripper
         msg = kortex_driver.msg.TwistCommand()
@@ -471,7 +477,6 @@ class PlugRemoveSlidAction(AbstractAction):
         msg.twist.linear_z = 0.0
         self.cart_vel_pub.publish(msg)
         force_control_loop_rate.sleep()
-        rospy.sleep(0.1)
         return inserted_plug
 
 
@@ -514,7 +519,7 @@ class PlugRemoveSlidAction(AbstractAction):
         rospy.loginfo("Moving forward")
         msg = kortex_driver.msg.TwistCommand()
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        for idx in range(20):
+        for idx in range(25):
             msg.twist.linear_y = 0.01
             self.cart_vel_pub.publish(msg)
             self.loop_rate.sleep()
