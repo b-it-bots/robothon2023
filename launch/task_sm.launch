@@ -7,6 +7,8 @@
         <rosparam command="load" file="$(find robothon2023)/config/trajectories.yaml"/>
         <remap from="~board_detector_event_out" to="/task_board_detector/event_out" />
         <remap from="~board_detector_event_in" to="/task_board_detector/event_in" />
+        <remap from="~points_of_interest_event_in" to="/points_of_interest_publisher/event_in" />
+        <remap from="~init_approximate_board_pose" to="/task_board_detector/approximate_board_pose" />
     </node>
     <include file="$(find robothon2023)/launch/task_board_detector.launch" />
 </launch>
