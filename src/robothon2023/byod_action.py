@@ -42,10 +42,10 @@ class ByodAction(AbstractAction):
         # if not success:
         #     return False
         
-        # rospy.loginfo(">> Rotate the Dial <<")
-        # success = self.arm.rotate_dial()
-        # if not success:
-        #     return False
+        rospy.loginfo(">> Rotate the Dial <<")
+        success = self.arm.rotate_dial()
+        if not success:
+            return False
                 
         rospy.loginfo(">> Reading multimeter screen <<")
         success = self.read_multimeter_screen()
@@ -152,6 +152,12 @@ class ByodAction(AbstractAction):
         if not success:
             return False
         rospy.sleep(1)
+
+            # close gripper 30% 
+        success = self.arm.execute_gripper_command(0.30)
+        if not success:
+            return False
+
             # approach and press button 
         success = self.arm.move_down_with_caution(force_threshold=[3,3,3], tool_z_thresh=0.045, velocity=0.01,retract=True)
         if not success:
@@ -166,6 +172,12 @@ class ByodAction(AbstractAction):
         if not success:
             return False
         rospy.sleep(1)
+
+            # close gripper 30% 
+        success = self.arm.execute_gripper_command(0.30)
+        if not success:
+            return False
+
             # approach and press button 
         success = self.arm.move_down_with_caution(force_threshold=[3,3,3], tool_z_thresh=0.045, velocity=0.01,retract=True)
         if not success:
@@ -184,8 +196,6 @@ class ByodAction(AbstractAction):
         rospy.loginfo(">> Reading multimeter screen <<")
         # read the screen and publish the value
         # TODO: implement the screen reading and publishing the value
-
-        
     
         return True
 
