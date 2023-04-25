@@ -60,6 +60,7 @@ class PointsOfInterestPublisher(object):
 
     def event_cb(self, msg):
         self.event = msg.data
+        self.board_poses_queue = []
 
     def board_pose_cb(self, msg):
         self.board_poses_queue.append(msg)
@@ -68,12 +69,9 @@ class PointsOfInterestPublisher(object):
 
     def run(self):
         while not rospy.is_shutdown():
-            #if self.event is None:
-            #    self.loop_rate.sleep()
-            #    continue
-            #if self.event == 'e_start':
-            #    self.board_poses_queue = []
-            #    self.event = 'e_running'
+            if self.event is None:
+                self.loop_rate.sleep()
+                continue
             if self.fixed_board_pose is None and len(self.board_poses_queue) < self.num_detections_of_board:
                 self.loop_rate.sleep()
                 continue
