@@ -98,9 +98,9 @@ class TaskSM(object):
 
         feedback = rospy.wait_for_message("/my_gen3/base_feedback", BaseCyclic_Feedback)
         updated_pose = self.init_board_pose
-        updated_pose.pose.position.x = feedback.base.tool_pose_x
-        updated_pose.pose.position.y = feedback.base.tool_pose_y
-        updated_pose.pose.position.z = feedback.base.tool_pose_z
+        updated_pose.pose.position.x = self.init_board_pose.pose.position.x
+        updated_pose.pose.position.y = self.init_board_pose.pose.position.y
+        updated_pose.pose.position.z = feedback.base.tool_pose_z - 0.05
         updated_pose.pose.orientation = geometry_msgs.msg.Quaternion(*quat)
         kinova_pose = get_kinovapose_from_pose_stamped(updated_pose)
         self.arm.send_cartesian_pose(kinova_pose)
