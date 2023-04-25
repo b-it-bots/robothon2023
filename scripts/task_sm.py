@@ -19,7 +19,7 @@ from robothon2023.button_press_action import ButtonPressAction
 from robothon2023.slider_action import SliderAction
 from robothon2023.plug_remove_slid_action import PlugRemoveSlidAction
 from robothon2023.probe_action import ProbeAction
-#from robothon2023.wind_cable_action import WindCableAction
+from robothon2023.wind_cable_action import WindCableAction
 
 
 class TaskSM(object):
@@ -40,7 +40,7 @@ class TaskSM(object):
                                  SliderAction(self.arm, self.tu),
                                  PlugRemoveSlidAction(self.arm, self.tu),
                                  ProbeAction(self.arm, self.tu),
-                                 ButtonPressAction(self.arm, self.tu),## TODO: replace with WindCableAction here
+                                 WindCableAction(self.arm, self.tu),## TODO: replace with WindCableAction here
                                  ButtonPressAction(self.arm, self.tu, reference_frame='red_button_link')]
 
 

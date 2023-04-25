@@ -89,11 +89,13 @@ class FullArmMovement:
     def cb_action_topic(self, notif):
         self.last_action_notif_type = notif.action_event
     
-    def traverse_waypoints(self, waypoints: List[KinovaPose]):
+    def traverse_waypoints(self, waypoints: List[KinovaPose], max_lin_vel: float = 0.1, max_ang_vel: float = 15.0):
         '''
         waypoints: list of KinovaPose's to traverse.\n
         each waypoint is a list of 6 floats: [x, y, z, roll, pitch, yaw].\n
-        angles are in degrees.
+        angles are in degrees.\n
+        input: max_lin_vel is in m/s\n
+        input: max_ang_vel is in degrees/s\n
         '''
         self.last_action_notif_type = None
         # move the arm through the waypoints
@@ -109,7 +111,9 @@ class FullArmMovement:
                                                                     kinova_pose.theta_x_deg,
                                                                     kinova_pose.theta_y_deg,
                                                                     kinova_pose.theta_z_deg,
-                                                                    0.0))
+                                                                    0.0,
+                                                                    max_lin_vel,
+                                                                    max_ang_vel))
         
         trajectory.use_optimal_blending = True
 
@@ -146,13 +150,20 @@ class FullArmMovement:
        
         return cartesianWaypoint
     
-    def FillCartesianWaypoint(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius):
+    def FillCartesianWaypoint(self, new_x, new_y, new_z, new_theta_x, new_theta_y, new_theta_z, blending_radius, max_lin_vel=0.1, max_ang_vel=15):
         '''
         input: x, y, z, theta_x, theta_y, theta_z, blending_radius\n
-        input angles are in degrees\n
+        input: angles are in degrees\n
         '''
         waypoint = Waypoint()
         cartesianWaypoint = CartesianWaypoint()
+
+        if max_lin_vel > 0.1:
+            max_lin_vel = 0.1
+        if max_ang_vel > 15:
+            max_ang_vel = 15
+        cartesianWaypoint.maximum_linear_velocity = max_lin_vel # m/s
+        cartesianWaypoint.maximum_angular_velocity = max_ang_vel # in degrees/s
 
         cartesianWaypoint.pose.x = new_x
         cartesianWaypoint.pose.y = new_y
@@ -361,7 +372,7 @@ class FullArmMovement:
             time.sleep(0.5)
             return True
 
-    def send_cartesian_pose(self, pose: KinovaPose, num_retries: int = 3):
+    def send_cartesian_pose(self, pose: KinovaPose, num_retries: int = 3, max_lin_vel: float = 0.1, max_ang_vel: float = 15.0):
         '''
         input: pose (PoseStamped)
         output: success (bool)
@@ -369,7 +380,7 @@ class FullArmMovement:
         '''
         self.last_action_notif_type = None
         for idx in range(num_retries):
-            success = self.traverse_waypoints([pose])
+            success = self.traverse_waypoints([pose], max_lin_vel, max_ang_vel)
             if success:
                 break
             time.sleep(0.01)
@@ -389,6 +400,7 @@ class FullArmMovement:
                                 force_threshold=[4,4,4],  tool_z_thresh=0.095,
                                 approach_axis='z',
                                 retract = True,
+                                retract_dist = 0.015,
                                 ref_frame=CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL):
         """
         Move the arm with caution using velocity and force monitoring
@@ -403,6 +415,7 @@ class FullArmMovement:
         rate_loop = rospy.Rate(10)
         self.fm.set_force_threshold(force=force_threshold) # force in z increases to 4N when it is in contact with the board
 
+        self.fm.reset_force_limit_flag()
         # enable force monitoring
         self.fm.enable_monitoring()
         
@@ -430,21 +443,36 @@ class FullArmMovement:
             current_pose = self.get_current_pose()
             if self.fm.force_limit_flag or current_pose.z < tool_z_thresh:
                 dist_flag = True
-                rospy.logwarn("Distance limit in Z axis reached")
+                if self.fm.force_limit_flag:
+                    rospy.logwarn("Force limit in Z axis reached")
+                if current_pose.z < tool_z_thresh:
+                    rospy.logwarn("Distance limit in Z axis reached")
+                print("----------------------------------")
+                print("Force value: ", self.fm.accumulated_force[approach_axis]) 
+                print("distance value: ", current_pose.z)
+                print("----------------------------------")
                 break
+                
             self.cartesian_velocity_pub.publish(approach_twist)
             rate_loop.sleep()
 
+        # rospy.loginfo("Stopping arm velocity")
         success = self.stop_arm_velocity()
+        # rospy.loginfo("Stopped arm velocity")
+
         if not success:
             return False
         
+        # rospy.loginfo("Disabling force monitoring")
         self.fm.disable_monitoring()
+        # rospy.loginfo("Force monitoring disabled")
 
         force_control_loop_rate = rospy.Rate(rospy.get_param("~force_control_loop_rate", 10.0))
     
         if retract:
-            velocity = 0.01
+            distance = retract_dist ; time = 1 
+            velocity = distance/time
+
             retract_twist = TwistCommand()
             retract_twist.reference_frame = ref_frame
 
@@ -457,11 +485,11 @@ class FullArmMovement:
 
             if self.fm.force_limit_flag or dist_flag:
                 self.cartesian_velocity_pub.publish(retract_twist)
-                
-                for _ in range(10):
-                    force_control_loop_rate.sleep()
+                rospy.sleep(time)
             
             self.stop_arm_velocity()
+
+        self.fm.reset_force_limit_flag()
         return True
     
     def move_with_velocity(self, distance, time, direction, velocity=None, ref_frame=CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL):

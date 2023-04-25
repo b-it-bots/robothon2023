@@ -32,6 +32,7 @@ class ForceMeasurmement:
         self._force_threshold = force_threshold 
         self.monitoring = False
         self.force_limit_flag = False
+        self.accumulated_force = None
 
     def _force_callback(self, msg):
 
@@ -93,6 +94,7 @@ class ForceMeasurmement:
         force_accumulated[2] = abs(np.mean(self._force['z']) - self._force['z'][-1])
         force_accumulated[3] = abs(np.mean(self._force['t_z']) - self._force['t_z'][-1])
 
+        # print("Force accumulated in Z --> : ", force_accumulated[2])
 
         yellow = "\033[93m"
 
@@ -104,8 +106,8 @@ class ForceMeasurmement:
         for i, f in zip(idx,force_accumulated):
             force_dict[i] = f
 
-        # print("*"* 20)
-        # print(force_dict)
+        self.accumulated_force = force_dict
+
         if force_dict['x'] > force_limit[0]:
             rospy.loginfo(yellow + "Force limit reached in x direction" + "\033[0m")
             rospy.loginfo(force_dict['x'])
@@ -127,18 +129,19 @@ class ForceMeasurmement:
             data[3] = 1
 
         if data[0] == 1 or data[1] == 1 or data[2] == 1 or data[3] == 1:
+
+            # rospy.loginfo(yellow + " =================>>>> Force FLAG SET" + "\033[0m")
             self.set_force_limit_flag()
             # pass
         # if force_dict["x"] > 20 or force_dict["y"] > 20 or force_dict["z"] > 20:
         #     self.fam.apply_E_STOP()
 
-    
     # Returns the force measured by the robot
     def get_force(self):
-        return self._force
+        return self.accumulated_force
 
     def enable_monitoring(self):
-        
+        self.reset_force_limit_flag()
         self.monitoring = True
         return True
     
