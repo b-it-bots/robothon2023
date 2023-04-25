@@ -41,8 +41,8 @@ class ButtonPressAction(AbstractAction):
         pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.05)
         kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name=self.button_reference_frame,
                                                                       target_frame_name="base_link",
-                                                                      offset_linear=[0.0, 0.0, pre_height_above_button],
-                                                                      offset_rotation_euler=[math.pi, 0.0, math.pi/2])
+                                                                      offset_linear=[0.0, 0.005, pre_height_above_button],
+                                                                      offset_rotation_euler=[math.pi, 0.0, math.pi/4])
 
         self.arm.execute_gripper_command(1.0)
         self.arm.send_cartesian_pose(kinova_pose)
