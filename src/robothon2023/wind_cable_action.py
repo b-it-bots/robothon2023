@@ -545,47 +545,52 @@ class WindCableAction(AbstractAction):
 
         results = self.model(self.image, size=640)  # try 480, 512, 640
 
-        if results.pred[0] is not None:  # if there are any detections
-            predictions = results.pred[0]
-            if predictions[:, 4]:
-                #TODO: add some conditions to avoid wrong detections, eg. like the area of the bounding box
-                boxes = predictions[:, :4]  # x1, y1, x2, y2
+        # handle the error with try and except
+        try:
+            if results.pred[0] is not None:  # if there are any detections
+                predictions = results.pred[0]
+                if predictions[:, 4]:
+                    #TODO: add some conditions to avoid wrong detections, eg. like the area of the bounding box
+                    boxes = predictions[:, :4]  # x1, y1, x2, y2
 
-                # find the center of the image
-                center = (image_copy.shape[1] / 2, image_copy.shape[0] / 2)
+                    # find the center of the image
+                    center = (image_copy.shape[1] / 2, image_copy.shape[0] / 2)
 
-                # draw vertical line at the center of the image
-                cv2.line(image_copy, (int(center[0]), 0),
-                         (int(center[0]), image_copy.shape[0]), (0, 0, 255), 1)
+                    # draw vertical line at the center of the image
+                    cv2.line(image_copy, (int(center[0]), 0),
+                            (int(center[0]), image_copy.shape[0]), (0, 0, 255), 1)
 
-                # find the center of the bounding box
-                center_box = (boxes[0][0] + boxes[0][2]) / \
-                    2, (boxes[0][1] + boxes[0][3]) / 2
+                    # find the center of the bounding box
+                    center_box = (boxes[0][0] + boxes[0][2]) / \
+                        2, (boxes[0][1] + boxes[0][3]) / 2
 
-                # show the center of the bounding box on the image
-                cv2.circle(image_copy, (int(center_box[0]), int(
-                    center_box[1])), 4, (255, 255, 0), 1)
+                    # show the center of the bounding box on the image
+                    cv2.circle(image_copy, (int(center_box[0]), int(
+                        center_box[1])), 4, (255, 255, 0), 1)
 
-                # find the error in y direction
-                error_y = center[0] - center_box[0]
+                    # find the error in y direction
+                    error_y = center[0] - center_box[0]
 
-                # print the error on the image on the top left corner of the image
-                cv2.putText(image_copy, "Error: " + str(error_y.numpy()), (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+                    # print the error on the image on the top left corner of the image
+                    cv2.putText(image_copy, "Error: " + str(error_y.numpy()), (10, 30),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
 
-                # draw the error line from the center of bounding box to the y axis of the image
-                cv2.line(image_copy, (int(center_box[0]), int(center_box[1])), (int(
-                    center_box[0] + error_y), int(center_box[1])), (0, 255, 0), 2)
+                    # draw the error line from the center of bounding box to the y axis of the image
+                    cv2.line(image_copy, (int(center_box[0]), int(center_box[1])), (int(
+                        center_box[0] + error_y), int(center_box[1])), (0, 255, 0), 2)
 
-                # publish the debug image
-                self.img_pub.publish(
-                    self.bridge.cv2_to_imgmsg(image_copy, "bgr8"))
+                    # publish the debug image
+                    self.img_pub.publish(
+                        self.bridge.cv2_to_imgmsg(image_copy, "bgr8"))
 
-                return None, error_y.numpy()  # error in x direction (=0), error in y direction
+                    return None, error_y.numpy()  # error in x direction (=0), error in y direction
+                else:
+                    print("No predictions")
+                    return None, None
             else:
                 print("No predictions")
                 return None, None
-        else:
+        except:
             print("No predictions")
             return None, None
         
