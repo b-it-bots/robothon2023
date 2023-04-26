@@ -40,6 +40,8 @@ class WindCableAction(AbstractAction):
 
         # pre-perceive pose
 
+        self.arm.execute_gripper_command(0.0)
+
         # get the pre-perceive pose from tf
         msg = PoseStamped()
         msg.header.frame_id = "wind_cable_link"
@@ -49,13 +51,23 @@ class WindCableAction(AbstractAction):
         # convert to kinova pose
         kp = get_kinovapose_from_pose_stamped(wind_cable_pose)
 
-        kp.z -= 0.01
+        kp.z += 0.05
 
         # send to arm
         rospy.loginfo("Sending pre-perceive pose to arm")
-        success = self.arm.send_cartesian_pose(kp)
+        if not self.arm.send_cartesian_pose(kp):
+            rospy.logerr("Failed to send pre-perceive pose to arm")
+            return False
         
-        return success
+        kp.z = 0.0316
+
+        # send to arm
+        rospy.loginfo("Sending pre-perceive pose to arm")
+        if not self.arm.send_cartesian_pose(kp):
+            rospy.logerr("Failed to send pre-perceive pose to arm")
+            return False
+        
+        return True
 
     def act(self) -> bool:
         
@@ -104,7 +116,6 @@ class WindCableAction(AbstractAction):
     def wind_cable(self) -> bool:
 
         pose_num = 1
-        self.arm.execute_gripper_command(0.0)
         success = False
         for i in range(1, 5):
             gripper_angle = rospy.get_param("~wind_poses/traj" + str(i)+"/gripper")
@@ -161,6 +172,10 @@ class WindCableAction(AbstractAction):
             
             # for each pose, get the pose and convert to kinova pose
             for j in range(pose_num, num_poses+pose_num):
+
+                if j == 7:
+                    continue
+
                 pose = poses["pose" + str(j)]
 
                 msg = PoseStamped()

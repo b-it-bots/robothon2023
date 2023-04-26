@@ -40,7 +40,7 @@ class TaskSM(object):
                                  SliderAction(self.arm, self.tu),
                                  PlugRemoveSlidAction(self.arm, self.tu),
                                  ProbeAction(self.arm, self.tu),
-                                 WindCableAction(self.arm, self.tu),## TODO: replace with WindCableAction here
+                                 WindCableAction(self.arm, self.tu),
                                  ButtonPressAction(self.arm, self.tu, reference_frame='red_button_link')]
 
 

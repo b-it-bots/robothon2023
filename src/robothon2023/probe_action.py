@@ -358,7 +358,7 @@ class ProbeAction(AbstractAction):
         #rospy.sleep(1.0) # wait for the arm to settle for proper force sensing
 
         # velocity mode to approach the door knob
-        success = self.arm.move_down_with_caution(velocity=0.01, force_threshold=[4,4,2.5], retract_dist=0.01)
+        success = self.arm.move_down_with_caution(velocity=0.01, force_threshold=[4,4,2.5], retract_dist=0.0075)
 
         if not success:
             rospy.logerr("Failed to move down the arm")
