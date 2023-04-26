@@ -13,7 +13,7 @@
 
 import sys
 import rospy
-import time
+import time 
 import math
 import tf
 
@@ -437,21 +437,27 @@ class FullArmMovement:
 
         dist_flag = False
 
+        time_current =  rospy.get_time()
+
         while not self.fm.force_limit_flag and not rospy.is_shutdown(): 
             # check for force limit flag and stop if it is true
             # check for the z axis of the tooltip and stop if it is less than 0.111(m) (the z axis of the slider) from base frame
             current_pose = self.get_current_pose()
-            if self.fm.force_limit_flag or current_pose.z < tool_z_thresh:
+            if self.fm.force_limit_flag or current_pose.z < tool_z_thresh or abs(time_current - rospy.get_time()) >= time:
                 dist_flag = True
                 if self.fm.force_limit_flag:
                     rospy.logwarn("Force limit reached")
                 if current_pose.z < tool_z_thresh:
                     rospy.logwarn("Distance limit in Z axis reached")
-                print("----------------------------------")
-                print("Force value: ", self.fm.accumulated_force[approach_axis]) 
-                print("distance value: ", current_pose.z)
-                print("----------------------------------")
+                if abs(time_current - rospy.get_time()) >= time:
+                    rospy.loginfo("Travel time of "+ str(time) +"s elapsed ")
+                
+                # print("----------------------------------")
+                # print("Force value: ", self.fm.accumulated_force[approach_axis]) 
+                # print("distance value: ", current_pose.z)
+                # print("----------------------------------")
                 break
+            
                 
             self.cartesian_velocity_pub.publish(approach_twist)
             rate_loop.sleep()

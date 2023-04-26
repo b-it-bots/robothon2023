@@ -23,8 +23,7 @@ class SliderAction(AbstractAction):
         self.slider_pose = PoseStamped()
         
         self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
-        print("Slider Action Initialized")
-        
+      
 
     def pre_perceive(self) -> bool:
         print ("in pre perceive")
@@ -46,6 +45,10 @@ class SliderAction(AbstractAction):
 
         rospy.loginfo(">> Approaching slider with caution <<")
         if not self.approach_slider_with_caution():
+            return False
+
+        rospy.loginfo(">> Clossing gripper <<")
+        if not self.arm.execute_gripper_command(0.75):
             return False
 
         rospy.loginfo(">> Moving arm along the slider <<")
@@ -125,13 +128,13 @@ class SliderAction(AbstractAction):
 
         offset = 0.05 # offset for the distance from tool frame to the tool tip
         rate_loop = rospy.Rate(10)
-        self.fm.set_force_threshold(force=[4,4,2]) # force in z increases to 4N when it is in contact with the board
+        self.fm.set_force_threshold(force=[4,4,3]) # force in z increases to 4N when it is in contact with the board
 
         # enable force monitoring
         self.fm.enable_monitoring()
         
         # calculate velocity
-        distance = offset; time = 6 # move 5 cm in 6 seconds
+        distance = offset; time = 3 # move 5 cm in 6 seconds
         velocity = distance/time
 
         # create twist command to move towards the slider
@@ -154,7 +157,7 @@ class SliderAction(AbstractAction):
         
         self.fm.disable_monitoring()
 
-        distance = 0.008 ; time = 1 # move back 8 mm
+        distance = 0.01 ; time = 1 # move back 8 mm
         velocity = distance/time
 
         retract_twist = TwistCommand()
@@ -175,10 +178,10 @@ class SliderAction(AbstractAction):
 
         if direction == "forward":
             dv = 1
-            distance = 0.05 # external boundary of the slider 
+            distance = 0.0255
         elif direction == "backward":
             dv = -1
-            distance = 0.05 # external boundary of the slider with gripper offset
+            distance = 0.0255
         elif direction == "None":
             print("No direction specified")
             return False
@@ -188,22 +191,23 @@ class SliderAction(AbstractAction):
         
         #calculate force in slider axis 
 
-        #get current yaw angle 
-        current_pose = self.arm.get_current_pose()
-        force_theta = current_pose.theta_z_deg
+        # #get current yaw angle 
+        # current_pose = self.arm.get_current_pose()
+        # force_theta = current_pose.theta_z_deg
 
-        #calcuate mag in given angle        
-        slider_force_threshold = 3 # N
-        theta = np.deg2rad(force_theta)
-        force_x = slider_force_threshold * math.cos(theta)
-        force_y = slider_force_threshold * math.sin(theta)
+        # #calcuate mag in given angle        
+        # slider_force_threshold = 3 # N
+        # theta = np.deg2rad(force_theta)
 
-        print("force_x: ", force_x)
-        print("force_y: ", force_y)
+        # force_x = max( abs(slider_force_threshold * math.cos(theta)) , 2.5)
+        # force_y = max( abs(slider_force_threshold * math.sin(theta)) , 2.5)
+
+        # print("force_x: ", force_x)
+        # print("force_y: ", force_y)
         
-        success = self.arm.move_down_with_caution(velocity= dv*0.01,
-                                force_threshold=[force_x,force_y,3], approach_axis='x',
-                                retract = True,
+        success = self.arm.move_down_with_caution(distance = dv*distance, time = 3,
+                                force_threshold=[5,5,3], approach_axis='x',
+                                retract = False,
                                 retract_dist = 0.01) 
         if not success:
             return False
