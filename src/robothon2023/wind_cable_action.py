@@ -75,10 +75,10 @@ class WindCableAction(AbstractAction):
         # start visual servoing
         rospy.loginfo("Starting visual servoing")
         # TODO: fix the visual servoing
-        # success = self.run_visual_servoing(self.detect_wind_cable, True)
+        success = self.run_visual_servoing(self.detect_wind_cable, True)
 
-        # if not success:
-        #     return False
+        if not success:
+            return False
         
         # wind cable
         success = self.wind_cable()
