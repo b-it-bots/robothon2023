@@ -1,7 +1,8 @@
 
 import math
 import numpy as np
-
+import rospy
+import time as tt
 # angle = 0
 
 # radius = 0.055
@@ -212,6 +213,17 @@ def ellipse_test():
 
         print("++++++++++++++++++++++++++++++"+"\n")
 
+def angle():
+
+    # force = [1,4]
+    force_theta = 26
+    theta = np.deg2rad(force_theta)
+    force_mag = 3
+    force_x = force_mag * math.cos(theta)
+    force_y = force_mag * math.sin(theta)
+
+    print("force_x: ", force_x)
+    print("force_y: ", force_y)
 
 def open_door(self):
 
@@ -513,5 +525,17 @@ def push_door(self):  # push door is not cuurently used
         return False
 
     print("[probe_action] target reached")    
+
+
+def time_calculator():
+
+    time = 5
+    time_now = tt.time()
+
+    while True:
+        if abs(time_now - tt.time()) >= time:
+            print("time is up")
+            break
+
 if __name__ == "__main__":
-    ellipse_test()
+    time_calculator()

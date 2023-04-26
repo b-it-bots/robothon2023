@@ -23,8 +23,7 @@ class SliderAction(AbstractAction):
         self.slider_pose = PoseStamped()
         
         self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
-        print("Slider Action Initialized")
-        
+      
 
     def pre_perceive(self) -> bool:
         print ("in pre perceive")
@@ -41,11 +40,15 @@ class SliderAction(AbstractAction):
             return False
 
         rospy.loginfo(">> Clossing gripper <<")
-        if not self.arm.execute_gripper_command(0.53):
+        if not self.arm.execute_gripper_command(0.45):
             return False
 
         rospy.loginfo(">> Approaching slider with caution <<")
         if not self.approach_slider_with_caution():
+            return False
+
+        rospy.loginfo(">> Clossing gripper <<")
+        if not self.arm.execute_gripper_command(0.75):
             return False
 
         rospy.loginfo(">> Moving arm along the slider <<")
@@ -125,13 +128,13 @@ class SliderAction(AbstractAction):
 
         offset = 0.05 # offset for the distance from tool frame to the tool tip
         rate_loop = rospy.Rate(10)
-        self.fm.set_force_threshold(force=[4,4,2]) # force in z increases to 4N when it is in contact with the board
+        self.fm.set_force_threshold(force=[4,4,3]) # force in z increases to 4N when it is in contact with the board
 
         # enable force monitoring
         self.fm.enable_monitoring()
         
         # calculate velocity
-        distance = offset; time = 6 # move 5 cm in 6 seconds
+        distance = offset; time = 3 # move 5 cm in 6 seconds
         velocity = distance/time
 
         # create twist command to move towards the slider
@@ -154,7 +157,7 @@ class SliderAction(AbstractAction):
         
         self.fm.disable_monitoring()
 
-        distance = 0.008 ; time = 1 # move back 8 mm
+        distance = 0.01 ; time = 1 # move back 8 mm
         velocity = distance/time
 
         retract_twist = TwistCommand()
@@ -175,56 +178,40 @@ class SliderAction(AbstractAction):
 
         if direction == "forward":
             dv = 1
-            distance = 0.03 # external boundary of the slider 
+            distance = 0.0255
         elif direction == "backward":
             dv = -1
-            distance = 0.05 # external boundary of the slider with gripper offset
+            distance = 0.0255
         elif direction == "None":
             print("No direction specified")
             return False
         else:
             print("Invalid direction")
             return False
-         
-        time = 5 # s
-        slider_velocity = round(distance/time , 3) # m/s
+        
+        #calculate force in slider axis 
 
-        slider_velocity_cmd = TwistCommand()
-        slider_velocity_cmd.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        slider_velocity_cmd.twist.linear_x = slider_velocity * dv
+        # #get current yaw angle 
+        # current_pose = self.arm.get_current_pose()
+        # force_theta = current_pose.theta_z_deg
 
-        rate_loop = rospy.Rate(10)
+        # #calcuate mag in given angle        
+        # slider_force_threshold = 3 # N
+        # theta = np.deg2rad(force_theta)
 
-        self.fm.reset_force_limit_flag()
-        self.fm.set_force_threshold(force=[4.0,4.0,4.0]) 
-        self.fm.enable_monitoring() 
+        # force_x = max( abs(slider_force_threshold * math.cos(theta)) , 2.5)
+        # force_y = max( abs(slider_force_threshold * math.sin(theta)) , 2.5)
 
-        # stop the while loop after 3 seconds
-        start_time = rospy.get_time()
-        while not self.fm.force_limit_flag and not rospy.is_shutdown() and (rospy.get_time() - start_time) < time: 
-            if self.fm.force_limit_flag:
-                rospy.loginfo(">> Force limit flag stopped the action <<")
-                break
-            self.cartesian_velocity_pub.publish(slider_velocity_cmd)
-            rate_loop.sleep()
-
-        success = self.stop_arm()
+        # print("force_x: ", force_x)
+        # print("force_y: ", force_y)
+        
+        success = self.arm.move_down_with_caution(distance = dv*distance, time = 3,
+                                force_threshold=[5,5,3], approach_axis='x',
+                                retract = False,
+                                retract_dist = 0.01) 
         if not success:
             return False
         
-        self.fm.disable_monitoring()
-
-        distance = 0.01 ; time = 0.5 # move back 8 mm
-        velocity = distance/time
-
-        retract_twist = TwistCommand()
-        retract_twist.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        retract_twist.twist.linear_x = -velocity * dv
-
-        self.cartesian_velocity_pub.publish(retract_twist)
-        rospy.sleep(time)
-        self.stop_arm()
-
         rospy.loginfo(">> moved slider forward <<")
         rospy.loginfo(">> SLEEPING for 0.5 <<")
 
@@ -288,9 +275,46 @@ class SliderAction(AbstractAction):
 
 
 
+    def garr(self):
 
+        time = 4.5 # s
+        slider_velocity = round(distance/time , 3) # m/s
 
+        slider_velocity_cmd = TwistCommand()
+        slider_velocity_cmd.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        slider_velocity_cmd.twist.linear_x = slider_velocity * dv
 
+        rate_loop = rospy.Rate(10)
+
+        self.fm.reset_force_limit_flag()
+        self.fm.set_force_threshold(force=[3.0,3.0,3.0]) 
+        self.fm.enable_monitoring() 
+
+        # stop the while loop after 3 seconds
+        start_time = rospy.get_time()
+        while not self.fm.force_limit_flag and not rospy.is_shutdown() and (rospy.get_time() - start_time) < time: 
+            if self.fm.force_limit_flag:
+                rospy.loginfo(">> Force limit flag stopped the action <<")
+                break
+            self.cartesian_velocity_pub.publish(slider_velocity_cmd)
+            rate_loop.sleep()
+
+        success = self.stop_arm()
+        if not success:
+            return False
+        
+        self.fm.disable_monitoring()
+
+        distance = 0.01 ; time = 0.5 # move back 8 mm
+        velocity = distance/time
+
+        retract_twist = TwistCommand()
+        retract_twist.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+        retract_twist.twist.linear_x = -velocity * dv
+
+        self.cartesian_velocity_pub.publish(retract_twist)
+        rospy.sleep(time)
+        self.stop_arm()
 
 
 
