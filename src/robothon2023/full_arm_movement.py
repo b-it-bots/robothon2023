@@ -444,7 +444,7 @@ class FullArmMovement:
             if self.fm.force_limit_flag or current_pose.z < tool_z_thresh:
                 dist_flag = True
                 if self.fm.force_limit_flag:
-                    rospy.logwarn("Force limit in Z axis reached")
+                    rospy.logwarn("Force limit reached")
                 if current_pose.z < tool_z_thresh:
                     rospy.logwarn("Distance limit in Z axis reached")
                 print("----------------------------------")
@@ -506,7 +506,7 @@ class FullArmMovement:
         if velocity is None:
             velocity = distance/time
 
-        # create twist command to move towards the slider
+        # create twist command 
         approach_twist = TwistCommand()
         approach_twist.reference_frame = ref_frame
         if direction == 'x':
@@ -515,6 +515,37 @@ class FullArmMovement:
             approach_twist.twist.linear_y = velocity
         elif direction == 'z':
             approach_twist.twist.linear_z = velocity
+
+        self.cartesian_velocity_pub.publish(approach_twist)
+        rospy.sleep(time)
+        self.stop_arm_velocity()
+
+        return True
+    
+        
+    def rotate_with_velocity(self, angle, axis, time, ang_velocity=None, ref_frame=CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL):
+        """
+        Move the arm with ang_velocity in a given direction
+
+        angle: angle to move in deg
+        time: time to move in s
+        direction: direction to rotate in ('x', 'y', 'z')
+        ang_velocity: ang_velocity to move in deg/s (overrides arc_distance and time)
+        ref_frame: reference frame to move in (Tool, Base): default is Tool
+        """
+
+        if ang_velocity is None:
+            ang_velocity = angle/time
+
+        # create twist command 
+        approach_twist = TwistCommand()
+        approach_twist.reference_frame = ref_frame
+        if axis == 'x':
+            approach_twist.twist.angular_x = ang_velocity
+        elif axis == 'y':
+            approach_twist.twist.angular_y = ang_velocity
+        elif axis == 'z':
+            approach_twist.twist.angular_z = ang_velocity
 
         self.cartesian_velocity_pub.publish(approach_twist)
         rospy.sleep(time)
