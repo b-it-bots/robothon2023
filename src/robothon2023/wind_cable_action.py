@@ -370,14 +370,7 @@ class WindCableAction(AbstractAction):
         roi = self.image[self.image.shape[0] // 2 - y_axis_top:self.image.shape[0] // 2 + y_axis_bottom,
                     self.image.shape[1] // 2 - x_axis_left:self.image.shape[1] // 2 + x_axis_right]
 
-        # draw a white line on the bottom of the image
-        # cv2.line(roi, (0, roi.shape[0] - 1), (roi.shape[1],
-        #         roi.shape[0] - 1), (255, 255, 255), 2)
-
-        # # draw a white line on the top of the image
-        # cv2.line(roi, (0, 0), (roi.shape[1], 0), (255, 255, 255), 2)
-
-        cv2.rectangle(roi, (0, 0), (roi.shape[1], roi.shape[0]), (255, 255, 255), 2)
+        cv2.rectangle(roi, (0, 0), (roi.shape[1], roi.shape[0]), (255, 255, 255), 20)
 
         roi_copy = roi.copy()
         roi_copy_2 = roi.copy()
@@ -387,10 +380,15 @@ class WindCableAction(AbstractAction):
         # apply gaussian blur to the image
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
         # otsu thresholding
-        ret, thresh = cv2.threshold(
-            blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # ret, thresh = cv2.threshold(
+        #     blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        ret, blur = cv2.threshold(
+            blur, 100, 255, cv2.THRESH_BINARY)
         # apply canny edge detection
-        canny = cv2.Canny(thresh, 50, 150)
+        canny = cv2.Canny(blur, 50, 150)
+        # apply dilation
+        kernel = np.ones((3, 3), np.uint8)
+        canny = cv2.dilate(canny, kernel, iterations=1)
         # find the contours
         contours, _ = cv2.findContours(
             canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
