@@ -43,9 +43,10 @@ The following launch file will move the arm to the perceive pose, trigger the `t
 ```
 roslaunch robothon2023 task_sm.launch
 ```
-If you want to trigger the `task_board_detector` separately, run:
+If you want to trigger the `task_board_detector` separately, run both of the following:
 ```
 rostopic pub /task_board_detector/event_in std_msgs/String e_start
+rostopic pub /points_of_interest_publisher/event_in std_msgs/String e_start
 ```
 
 ## Manipulation First step 

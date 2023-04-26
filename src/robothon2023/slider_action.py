@@ -125,7 +125,7 @@ class SliderAction(AbstractAction):
 
         offset = 0.05 # offset for the distance from tool frame to the tool tip
         rate_loop = rospy.Rate(10)
-        self.fm.set_force_threshold(force=[4,4,4]) # force in z increases to 4N when it is in contact with the board
+        self.fm.set_force_threshold(force=[4,4,2]) # force in z increases to 4N when it is in contact with the board
 
         # enable force monitoring
         self.fm.enable_monitoring()
@@ -175,10 +175,10 @@ class SliderAction(AbstractAction):
 
         if direction == "forward":
             dv = 1
-            distance = 0.05 # external boundary of the slider
+            distance = 0.03 # external boundary of the slider 
         elif direction == "backward":
             dv = -1
-            distance = 0.07 # external boundary of the slider with gripper offset
+            distance = 0.05 # external boundary of the slider with gripper offset
         elif direction == "None":
             print("No direction specified")
             return False

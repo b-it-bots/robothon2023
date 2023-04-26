@@ -141,7 +141,7 @@ class ForceMeasurmement:
         return self.accumulated_force
 
     def enable_monitoring(self):
-        
+        self.reset_force_limit_flag()
         self.monitoring = True
         return True
     

@@ -1,15 +1,17 @@
-# 0: start
+# 0: start button
 # 1: slider
 # 2: plug probe
 # 3: probe circuit
 # 4: wrap cable
 # 5: stop
-task_order: [0, 1]
+task_order: [0, 1, 2, 3, 4, 5 ]
 debug: true
 pre_height_above_button: 0.08
 linear_vel_z: 0.01 # positive going up, negative going down; NOTE: changing this affects force_z_diff_threshold. Low velocities are more stable
 force_z_diff_threshold: 3.0 # if diff between current force and mean force is greater, stop
-probe_holder_pose: [0.5991508364677429, -0.01071108877658844, 0.12583768367767334, 90.0, 0.0, 90.0]
-probe_holder_pick_perceive_pose: [TODO]
-probe_pre_pick_from_holder_pose: [TODO]
 perceive_board_pose: [0.4634, 0.1357, 0.432, -180.0, 0.0, 153.0]
+# plug insertion
+plug_insertion_height_threshold: 0.125 # if we go below this height, we've inserted the plug
+max_insert_retries: 5 # number of times to retry inserting plug if we don't succeed
+# probing circuit
+max_probe_retries: 5 # number of times we try to probe the circuit

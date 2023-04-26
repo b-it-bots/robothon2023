@@ -20,6 +20,9 @@ class PointsOfInterestPublisher(object):
     def __init__(self):
         self.board_poses_queue = []
         self.fixed_board_pose = None
+        self.event = None
+
+        self.event_in_sub = rospy.Subscriber('~event_in', std_msgs.msg.String, self.event_cb)
 
         self.board_pose_sub = rospy.Subscriber('~approximate_board_pose', geometry_msgs.msg.PoseStamped, self.board_pose_cb)
         self.board_pose_pub = rospy.Publisher('~fixed_board_pose', geometry_msgs.msg.PoseStamped, queue_size=1)
@@ -55,6 +58,10 @@ class PointsOfInterestPublisher(object):
         self.tf_broadcaster = tf.TransformBroadcaster()
         self.transform_utils = TransformUtils()
 
+    def event_cb(self, msg):
+        self.event = msg.data
+        self.board_poses_queue = []
+
     def board_pose_cb(self, msg):
         self.board_poses_queue.append(msg)
         if len(self.board_poses_queue) > self.num_detections_of_board:
@@ -62,6 +69,9 @@ class PointsOfInterestPublisher(object):
 
     def run(self):
         while not rospy.is_shutdown():
+            if self.event is None:
+                self.loop_rate.sleep()
+                continue
             if self.fixed_board_pose is None and len(self.board_poses_queue) < self.num_detections_of_board:
                 self.loop_rate.sleep()
                 continue
