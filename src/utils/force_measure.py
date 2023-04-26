@@ -21,6 +21,10 @@ from kortex_driver.msg import *
 
 class ForceMeasurmement:
 
+    """
+    All the force values are at tool frame with respect to base frame(not in tool frame of reference)
+    """
+
     def __init__(self, force_threshold: list = [10,10, 10], topic_name: String = "None"):
         self._force_subscriber = rospy.Subscriber("/my_gen3/base_feedback", kortex_driver.msg.BaseCyclic_Feedback, self._force_callback)
         self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
@@ -42,7 +46,7 @@ class ForceMeasurmement:
 
         self._force['t_z'].append(msg.base.tool_external_wrench_torque_z)
 
-        if len(self._force['x']) > 10:
+        if len(self._force['x']) > 25:
             self._force['x'].pop(0)
             self._force['y'].pop(0)
             self._force['z'].pop(0)
@@ -51,22 +55,23 @@ class ForceMeasurmement:
             if self.monitoring:
                 self.force_check()
                 if self.force_limit_flag:
-                    self._force['x'].clear()
-                    self._force['y'].clear()
-                    self._force['z'].clear()
-                    self._force['t_z'].clear()
-            else:
-                self._force['x'].clear()
-                self._force['y'].clear()
-                self._force['z'].clear()
-                self._force['t_z'].clear()
+                    self.clear_force_queue()
+
+            if self.monitoring == False:
+                self.clear_force_queue()
         else:
             # rospy.logwarn("Force data not enough")
             pass
 
-        
-  # check if force is greater than threshold in continuous
+    def clear_force_queue(self):
 
+        self._force['x'].clear()
+        self._force['y'].clear()
+        self._force['z'].clear()
+        self._force['t_z'].clear()
+
+
+  # check if force is greater than threshold in continuous
     def set_force_threshold(self, force, torque_z = 5):
         """
         Sets the force threshold
@@ -94,7 +99,10 @@ class ForceMeasurmement:
         force_accumulated[2] = abs(np.mean(self._force['z']) - self._force['z'][-1])
         force_accumulated[3] = abs(np.mean(self._force['t_z']) - self._force['t_z'][-1])
 
-        # print("Force accumulated in Z --> : ", force_accumulated[2])
+        print("\n")
+        print("-"*20)
+        print("Force accumulated in x --> : ", force_accumulated[0])
+        print("Force accumulated in y --> : ", force_accumulated[1])
 
         yellow = "\033[93m"
 
