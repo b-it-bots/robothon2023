@@ -75,6 +75,8 @@ The images below illustrate the result of the Canny edge detection, contour dete
 </p>
 The robot arm is aligned with the door knob using [visual servoing](#visual-servoing).
 
+After alignment, the arm is moved down until contact with the door knob and retract back to a proper z position to grasp the door knob. The door is opened by following a predefined trajectory, and the arm is retracted back to a safe position position.
+
 ### Grasp probe and probe circuit
 
 ## Task 5: Wrap cable replace probe
