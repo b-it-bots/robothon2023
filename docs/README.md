@@ -41,12 +41,46 @@ The images below illustrate the blue and red filters, and the final result of th
 3. Forces are monitored during the slide to determine the end of the slider's path.
 
 ## Task 3: Plug probe in test port
+### Grasp plug
+
+### Insert plug in test port
+To align with the red port, the robot first moves forward (with respect to its grasping position) for a fixed amount. To better align with the red port, visual servoing is performed using the ends of pairs of bolts on the board as targets.
+The bolts are detected by applying adaptive thresholding on a cropped greyscale image, detecting circles, and selecting circles of equal sizes with an expected distance between their centers.
+The images below show the original image, thresholded image, and the detected vertical (blue) and horizontal (green) pairs of circles. Red circles represent other detected circles which are rejected by the distance and pairing constraints.
+The vertical pair of circles are used to align along the horizontal axis, and the horizontal pair for alignment along the vertical axis.
+
+<p float="left">
+  <img src="images/plug_insert/orig.jpg" width="250" />
+  <img src="images/plug_insert/mask.jpg" width="250" />
+  <img src="images/plug_insert/result.jpg" width="250" />
+</p>
+
+After alignment, the plug is inserted into the test port, by moving downwards with [force monitoring](#force-monitoring). This action is retried multiple times (with realignment) if it is detected that the plug has not been inserted (via a height and force threshold).
 
 ## Task 4: Open door and probe circuit
+### Grasp and stow the probe
+### Open the door
+The arm is moved above the door knob, based on the fixed transformation from the origin of the board. To align more precisely with the door knob, we detect the door knob with the following steps:
+1. Crop a region of interest
+2. Apply Canny edge detection
+3. Detect contours
+4. Find circles in the contour image using the Hough transform
+
+The images below illustrate the result of the Canny edge detection, contour detection and the final detected door knob.
+
+<p float="left">
+  <img src="images/door/canny.jpg" width="250" />
+  <img src="images/door/contours.jpg" width="250" />
+  <img src="images/door/result.jpg" width="250" />
+</p>
+The robot arm is aligned with the door knob using [visual servoing](#visual-servoing).
+
+### Grasp probe and probe circuit
 
 ## Task 5: Wrap cable replace probe
 
 ## Task 6: Press stop trial button
+This task is identical to Task 1, with the exception that the robot aligns with and presses the red button to stop the trial.
 
 
 ## Force monitoring
