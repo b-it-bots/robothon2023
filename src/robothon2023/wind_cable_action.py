@@ -357,7 +357,7 @@ class WindCableAction(AbstractAction):
         # parameters
         circularity_threshold_min = 0.0
         circularity_threshold_max = 0.5
-        contours_area_threshold_min = 100
+        contours_area_threshold_min = 5000
         contours_area_threshold_max = 10000
 
         # draw a rectangle on the image from the center of the image
@@ -370,14 +370,7 @@ class WindCableAction(AbstractAction):
         roi = self.image[self.image.shape[0] // 2 - y_axis_top:self.image.shape[0] // 2 + y_axis_bottom,
                     self.image.shape[1] // 2 - x_axis_left:self.image.shape[1] // 2 + x_axis_right]
 
-        # draw a white line on the bottom of the image
-        # cv2.line(roi, (0, roi.shape[0] - 1), (roi.shape[1],
-        #         roi.shape[0] - 1), (255, 255, 255), 2)
-
-        # # draw a white line on the top of the image
-        # cv2.line(roi, (0, 0), (roi.shape[1], 0), (255, 255, 255), 2)
-
-        cv2.rectangle(roi, (0, 0), (roi.shape[1], roi.shape[0]), (255, 255, 255), 2)
+        cv2.rectangle(roi, (0, 0), (roi.shape[1], roi.shape[0]), (255, 255, 255), 20)
 
         roi_copy = roi.copy()
         roi_copy_2 = roi.copy()
@@ -387,10 +380,15 @@ class WindCableAction(AbstractAction):
         # apply gaussian blur to the image
         blur = cv2.GaussianBlur(gray, (5, 5), 0)
         # otsu thresholding
-        ret, thresh = cv2.threshold(
-            blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        # ret, thresh = cv2.threshold(
+        #     blur, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        ret, blur = cv2.threshold(
+            blur, 100, 255, cv2.THRESH_BINARY)
         # apply canny edge detection
-        canny = cv2.Canny(thresh, 50, 150)
+        canny = cv2.Canny(blur, 50, 150)
+        # apply dilation
+        kernel = np.ones((3, 3), np.uint8)
+        canny = cv2.dilate(canny, kernel, iterations=1)
         # find the contours
         contours, _ = cv2.findContours(
             canny, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
@@ -496,47 +494,49 @@ class WindCableAction(AbstractAction):
 
         results = self.model(self.image, size=640)  # try 480, 512, 640
 
-        if results.pred[0] is not None:  # if there are any detections
-            predictions = results.pred[0]
-            if predictions[:, 4]:
-                #TODO: add some conditions to avoid wrong detections, eg. like the area of the bounding box
-                boxes = predictions[:, :4]  # x1, y1, x2, y2
+        # handle the error with try and except
+        try:
+            if results.pred[0] is not None:  # if there are any detections
+                predictions = results.pred[0]
+                if predictions[:, 4]:
+                    #TODO: add some conditions to avoid wrong detections, eg. like the area of the bounding box
+                    boxes = predictions[:, :4]  # x1, y1, x2, y2
 
-                # find the center of the image
-                center = (image_copy.shape[1] / 2, image_copy.shape[0] / 2)
+                    # find the center of the image
+                    center = (image_copy.shape[1] / 2, image_copy.shape[0] / 2)
 
-                # draw vertical line at the center of the image
-                cv2.line(image_copy, (int(center[0]), 0),
-                         (int(center[0]), image_copy.shape[0]), (0, 0, 255), 1)
+                    # draw vertical line at the center of the image
+                    cv2.line(image_copy, (int(center[0]), 0),
+                            (int(center[0]), image_copy.shape[0]), (0, 0, 255), 1)
 
-                # find the center of the bounding box
-                center_box = (boxes[0][0] + boxes[0][2]) / \
-                    2, (boxes[0][1] + boxes[0][3]) / 2
+                    # find the center of the bounding box
+                    center_box = (boxes[0][0] + boxes[0][2]) / \
+                        2, (boxes[0][1] + boxes[0][3]) / 2
 
-                # show the center of the bounding box on the image
-                cv2.circle(image_copy, (int(center_box[0]), int(
-                    center_box[1])), 4, (255, 255, 0), 1)
+                    # show the center of the bounding box on the image
+                    cv2.circle(image_copy, (int(center_box[0]), int(
+                        center_box[1])), 4, (255, 255, 0), 1)
 
-                # find the error in y direction
-                error_x = center[0] - center_box[0]
+                    # find the error in y direction
+                    error_x = center[0] - center_box[0]
 
-                # print the error on the image on the top left corner of the image
-                cv2.putText(image_copy, "Error: " + str(error_x.numpy()), (10, 30),
-                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+                    # print the error on the image on the top left corner of the image
+                    cv2.putText(image_copy, "Error: " + str(error_x.numpy()), (10, 30),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
 
-                # draw the error line from the center of bounding box to the y axis of the image
-                cv2.line(image_copy, (int(center_box[0]), int(center_box[1])), (int(
-                    center_box[0] + error_x), int(center_box[1])), (0, 255, 0), 2)
+                    # draw the error line from the center of bounding box to the y axis of the image
+                    cv2.line(image_copy, (int(center_box[0]), int(center_box[1])), (int(
+                        center_box[0] + error_x), int(center_box[1])), (0, 255, 0), 2)
 
-                # publish the debug image
-                self.img_pub.publish(
-                    self.bridge.cv2_to_imgmsg(image_copy, "bgr8"))
+                    # publish the debug image
+                    self.img_pub.publish(
+                        self.bridge.cv2_to_imgmsg(image_copy, "bgr8"))
 
                 return error_x.numpy(), None  # error in x direction
             else:
                 print("No predictions")
                 return None, None
-        else:
+        except:
             print("No predictions")
             return None, None
         
