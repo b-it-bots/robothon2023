@@ -17,6 +17,7 @@ import numpy as np
 import math
 import datetime
 import pdb
+import yolov5
 
 class WindCableAction(AbstractAction):
     def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
@@ -34,6 +35,9 @@ class WindCableAction(AbstractAction):
         self.loop_rate = rospy.Rate(10)
         self.bridge = CvBridge()
         self.cart_vel_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
+        self.model = yolov5.load(
+            '/home/b-it-bots/temp/robothon/weights/best_nano_2.pt')
+        self.model_params()
 
     def pre_perceive(self) -> bool:
         print ("in pre perceive")        
@@ -516,6 +520,7 @@ class WindCableAction(AbstractAction):
             error_line = [bottom_most_point, (roi.shape[1] // 2, bottom_most_point[1])]
             cv2.line(roi_copy_2, error_line[0], error_line[1], (255, 0, 0), 2)
 
+            # publish the debug image
             self.img_pub.publish(self.bridge.cv2_to_imgmsg(roi_copy_2, "bgr8"))
 
             return (error, None)
@@ -523,6 +528,66 @@ class WindCableAction(AbstractAction):
         else:
             print("No contour found!")
             return (None, None)
+    
+    def model_params(self):
+        self.model.conf = 0.25  # NMS confidence threshold
+        self.model.iou = 0.45  # NMS IoU threshold
+        self.model.agnostic = False  # NMS class-agnostic
+        self.model.multi_label = False  # NMS multiple labels per box
+        self.model.max_det = 1000  # maximum number of detections per image
+
+    def detect_probe_holder_horizontal(self, save_image=False):
+
+        if save_image:
+            self.save_debug_image()
+
+        image_copy = self.image.copy()
+
+        results = self.model(self.image, size=640)  # try 480, 512, 640
+
+        if results.pred[0] is not None:  # if there are any detections
+            predictions = results.pred[0]
+            if predictions[:, 4]:
+                #TODO: add some conditions to avoid wrong detections, eg. like the area of the bounding box
+                boxes = predictions[:, :4]  # x1, y1, x2, y2
+
+                # find the center of the image
+                center = (image_copy.shape[1] / 2, image_copy.shape[0] / 2)
+
+                # draw vertical line at the center of the image
+                cv2.line(image_copy, (int(center[0]), 0),
+                         (int(center[0]), image_copy.shape[0]), (0, 0, 255), 1)
+
+                # find the center of the bounding box
+                center_box = (boxes[0][0] + boxes[0][2]) / \
+                    2, (boxes[0][1] + boxes[0][3]) / 2
+
+                # show the center of the bounding box on the image
+                cv2.circle(image_copy, (int(center_box[0]), int(
+                    center_box[1])), 4, (255, 255, 0), 1)
+
+                # find the error in y direction
+                error_y = center[0] - center_box[0]
+
+                # print the error on the image on the top left corner of the image
+                cv2.putText(image_copy, "Error: " + str(error_y.numpy()), (10, 30),
+                            cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2)
+
+                # draw the error line from the center of bounding box to the y axis of the image
+                cv2.line(image_copy, (int(center_box[0]), int(center_box[1])), (int(
+                    center_box[0] + error_y), int(center_box[1])), (0, 255, 0), 2)
+
+                # publish the debug image
+                self.img_pub.publish(
+                    self.bridge.cv2_to_imgmsg(image_copy, "bgr8"))
+
+                return None, error_y.numpy()  # error in x direction (=0), error in y direction
+            else:
+                print("No predictions")
+                return None, None
+        else:
+            print("No predictions")
+            return None, None
         
     def save_debug_image(self):
         config_path = os.path.join(os.path.dirname(__file__), '../..', 'images')
@@ -531,4 +596,5 @@ class WindCableAction(AbstractAction):
         now = datetime.datetime.now()
 
         if self.image is not None:
-            cv2.imwrite(os.path.join(config_path, 'debug_image_{}.png'.format(now)), self.image)
+            cv2.imwrite(os.path.join(
+                config_path, 'WindCable_debug_image_{}.png'.format(now)), self.image)
