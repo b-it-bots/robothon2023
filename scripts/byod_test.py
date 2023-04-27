@@ -25,7 +25,6 @@ class ByodTest(object):
         print("full arm movement")
         self.fam = FullArmMovement()
         self.transform_utils = TransformUtils()
-        self.joint_angles = rospy.get_param("~joint_angles", None)
         self.fm = ForceMeasurmement() 
         self.setup_arm()
         self.byod_action = ByodAction(self.fam, self.transform_utils)
@@ -38,7 +37,6 @@ class ByodTest(object):
         # clear faults and subscribe to robot notifications to get feedback from the robot
         self.fam.clear_faults()
         self.fam.subscribe_to_a_robot_notification()
-        # self.fam.send_joint_angles(self.joint_angles["perceive_table"])
     
 
     def test(self):
