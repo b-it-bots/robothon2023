@@ -171,13 +171,14 @@ class RobothonTask(object):
 
         self.lists = [self.joint_angles, self.wind_cable_poses, self.byod_poses]
 
-        # self.arm = FullArmMovement()
-        # self.transform_utils = TransformUtils()
+        self.arm = FullArmMovement()
+        self.transform_utils = TransformUtils()
 
-        # # clear faults
-        # self.arm.clear_faults()
-        # rospy.sleep(0.5)
-        # self.arm.subscribe_to_a_robot_notification()
+        # clear faults
+        rospy.loginfo("Clearing faults...")
+        self.arm.clear_faults()
+        rospy.sleep(0.5)
+        self.arm.subscribe_to_a_robot_notification()
 
         self.master = tk.Tk()  # Updated to use tk instead of Tkinter
         self.master.title("Kinova Arm GUI")
@@ -273,12 +274,12 @@ class RobothonTask(object):
 
         # send transform to robot
         kp = get_kinovapose_from_pose_stamped(msg_bl)
-        kp.z += 0.05
+        kp.z += 0.1
         if not self.arm.send_cartesian_pose(kp):
             rospy.logerr("Failed to send transform to robot")
 
         # display popup window to inform user
-        messagebox.showinfo("Fixed Transform", "Fixed Transform sent to robot.\n Added 5cm +z offset for safety")
+        messagebox.showinfo("Fixed Transform", "Fixed Transform sent to robot.\n Added 10cm +z offset for safety")
 
     def probe_action_poses_cb(self, item: Item):
 
@@ -534,17 +535,17 @@ class RobothonTask(object):
         self.base_frame_text.config(state='normal')
         self.base_frame_text.delete('1.0', tk.END)
         self.base_frame_text.insert(tk.END, str(cp_list))
-        self.base_frame_text.config(state='disabled')
+        # self.base_frame_text.config(state='disabled')
 
         self.board_frame_text.config(state='normal')
         self.board_frame_text.delete('1.0', tk.END)
         self.board_frame_text.insert(tk.END, str(cp_in_bf))
-        self.board_frame_text.config(state='disabled')
+        # self.board_frame_text.config(state='disabled')
 
         self.joint_angles_text.config(state='normal')
         self.joint_angles_text.delete('1.0', tk.END)
         self.joint_angles_text.insert(tk.END, str(joint_angles))
-        self.joint_angles_text.config(state='disabled')
+        # self.joint_angles_text.config(state='disabled')
 
     def create_window(self):
 
