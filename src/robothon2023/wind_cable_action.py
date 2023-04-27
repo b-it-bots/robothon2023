@@ -43,6 +43,7 @@ class WindCableAction(AbstractAction):
 
         self.arm.execute_gripper_command(0.0)
 
+        '''
         # get the pre-perceive pose from tf
         msg = PoseStamped()
         msg.header.frame_id = "wind_cable_link"
@@ -67,6 +68,7 @@ class WindCableAction(AbstractAction):
         if not self.arm.send_cartesian_pose(kp):
             rospy.logerr("Failed to send pre-perceive pose to arm")
             return False
+        '''
         
         return True
 
@@ -75,7 +77,7 @@ class WindCableAction(AbstractAction):
         # start visual servoing
         rospy.loginfo("Starting visual servoing")
         # TODO: fix the visual servoing
-        success = self.run_visual_servoing(self.detect_wind_cable, True)
+        success = self.run_visual_servoing(self.detect_wind_cable, True, error_thresholds = [40, 50])
 
         if not success:
             return False
@@ -85,8 +87,12 @@ class WindCableAction(AbstractAction):
         
         if not success:
             return False
+
+        pose_for_tucking_kp = self.find_and_save_tucking_pose()
+
+
         
-        # wind cable
+        # pick probe from holder
         success = self.pick_probe_from_holder()
         
         if not success:
@@ -94,10 +100,8 @@ class WindCableAction(AbstractAction):
 
         # tuck the probe into board
         rospy.loginfo("Tucking probe into board")
-        success = self.tuck_probe_into_board()
+        success = self.tuck_probe_into_board(pose_for_tucking_kp)
 
-        if not success:
-            return False
 
         return success
 
@@ -214,10 +218,15 @@ class WindCableAction(AbstractAction):
         perceive_board_pose = get_kinovapose_from_list(perceive_board_pose)
         success = self.arm.send_cartesian_pose(perceive_board_pose)
 
-        tucking_safe_probe_holder_pick = rospy.get_param("~probe_action_poses/tucking_safe_probe_holder_pick")
-        tucking_safe_probe_holder_pick = get_kinovapose_from_list(tucking_safe_probe_holder_pick)
-        rospy.loginfo("[probe_action] moving to pose safe pose")
-        success = self.arm.send_cartesian_pose(tucking_safe_probe_holder_pick, max_lin_vel=0.05)
+        safe_pose_after_probe_placement = rospy.get_param("~probe_action_poses/safe_pose_after_probe_placement")
+        safe_pose_after_probe_placement = get_kinovapose_from_list(safe_pose_after_probe_placement)
+        rospy.loginfo("[probe_action] moving to safe pose after probe placement")
+        success = self.arm.send_cartesian_pose(safe_pose_after_probe_placement, max_lin_vel=0.05)
+
+        probe_place_pre_holder_pose = rospy.get_param("~probe_action_poses/probe_place_pre_holder_pose")
+        probe_place_pre_holder_pose = get_kinovapose_from_list(probe_place_pre_holder_pose)
+        rospy.loginfo("[probe_action] moving to probe place pre holder")
+        success = self.arm.send_cartesian_pose(probe_place_pre_holder_pose, max_lin_vel=0.05)
 
         tucking_probe_holder_pick = rospy.get_param("~probe_action_poses/tucking_probe_holder_pick")
         tucking_probe_holder_pick = get_kinovapose_from_list(tucking_probe_holder_pick)
@@ -249,23 +258,9 @@ class WindCableAction(AbstractAction):
 
         return True
 
-    def tuck_probe_into_board(self) -> bool:
-        # TODO: implement with velocity control
-        # get the probe initial position from tf
-        msg = PoseStamped()
-        msg.header.frame_id = "probe_initial_link"
-        msg.header.stamp = rospy.Time(0)
-        # TODO: check if this offset is correct wrt placing in holder
-        #probe_initial_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True, offset=[0, 0, -math.pi/2])
-
-        probe_initial_pose_kp = self.transform_utils.transform_pose_frame_name(reference_frame_name="probe_initial_link",
-                                                                      target_frame_name="base_link",
-                                                                      offset_linear=[0.03, 0.00, 0.08],
-                                                                      offset_rotation_euler=[math.pi, 0.0, -math.pi/2])
-
-        # send the probe initial position to the arm
+    def tuck_probe_into_board(self, pose_for_tucking_kp) -> bool:
         rospy.loginfo("[probe_action] moving to probe initial position")
-        success = self.arm.send_cartesian_pose(probe_initial_pose_kp)
+        success = self.arm.send_cartesian_pose(pose_for_tucking_kp)
 
         if not success:
             rospy.logerr("[probe_action] Failed to move to the probe initial position")
@@ -273,14 +268,23 @@ class WindCableAction(AbstractAction):
         
         rospy.loginfo('[probe_action] reached probe initial position')
 
+        rospy.loginfo("[probe_action] moving away from holder")
+        success = self.arm.move_with_velocity(0.06, 1.5, 'y')
+        if not success:
+            rospy.logerr("[probe_action] Failed to move away from holder")
+            return False
+
+        current_pose = self.arm.get_current_pose()
 
         # use velocity control to move the probe down
         rospy.loginfo("[probe_action] moving down the probe")
         # success = self.arm.move_down_with_caution(force_threshold=[4,4,1.75], velocity=0.005, tool_z_thresh=0.10, retract_dist=0.008)
 
-        probe_initial_pose_kp.z = 0.1173
+        pose_for_tucking_kp.z = 0.1173
+        pose_for_tucking_kp.x = current_pose.x
+        pose_for_tucking_kp.y = current_pose.y
 
-        success = self.arm.send_cartesian_pose(probe_initial_pose_kp, max_lin_vel=0.01)
+        success = self.arm.send_cartesian_pose(pose_for_tucking_kp, max_lin_vel=0.01)
 
         if not success:
             rospy.logerr("[probe_action] Failed to move down the probe")
@@ -291,17 +295,19 @@ class WindCableAction(AbstractAction):
         # move the probe back in x direction for 4cm
         #success = self.arm.move_with_velocity(-0.025, 3, 'y')
 
-        #if not success:
-        #    rospy.logerr("Failed to move back the probe")
-        #    return False
+        self.arm.move_down_with_caution(approach_axis='y', distance=0.05, force_threshold=[5,5, 10])
 
-        #self.arm.execute_gripper_command(0.6) # open the gripper
+        if not success:
+            rospy.logerr("Failed to move back the probe")
+            return False
+
+        self.arm.execute_gripper_command(0.6) # open the gripper
 
         # move the arm up in z axis
         #success = self.arm.move_with_velocity(0.03, 3, 'z')
         return True
 
-    def run_visual_servoing(self, vs_target_fn, run=True):
+    def run_visual_servoing(self, vs_target_fn, run=True, error_thresholds=[5, 10]):
         stop = False
         while not rospy.is_shutdown():
             if self.image is None:
@@ -324,9 +330,9 @@ class WindCableAction(AbstractAction):
                 if x_error > 0:
                     msg.twist.linear_x = 0.005
                 #TODO : Make this separate for both 
-                if abs(x_error) < 5:     #TODO 40 for picking cable 5 for tcuking alignment 
+                if abs(x_error) < error_thresholds[0]:     #TODO 40 for picking cable 5 for tcuking alignment 
                     msg.twist.linear_x = 0.0
-                elif abs(x_error) < 10: #TODO 50 for picking cable 
+                elif abs(x_error) < error_thresholds[1]: #TODO 50 for picking cable 
                     msg.twist.linear_x *= 0.5
 
             if y_error is not None:
@@ -478,6 +484,31 @@ class WindCableAction(AbstractAction):
             print("No contour found!")
             return (None, None)
     
+    def find_and_save_tucking_pose(self):
+        probe_initial_pose_kp = self.transform_utils.transform_pose_frame_name(reference_frame_name="probe_initial_link",
+                                                                      target_frame_name="base_link",
+                                                                      offset_linear=[0.0, 0.00, 0.08],
+                                                                      offset_rotation_euler=[math.pi, 0.0, math.pi/2])
+
+        # send the probe initial position to the arm
+        rospy.loginfo("[probe_action] moving to probe initial position")
+        success = self.arm.send_cartesian_pose(probe_initial_pose_kp)
+
+        if not success:
+            rospy.logerr("[probe_action] Failed to move to the probe initial position")
+            return False
+
+        # visual servo to find correct location to place probe before picking the probe
+        success = self.run_visual_servoing(self.detect_probe_holder_horizontal, True, error_thresholds = [5, 10])
+        pose_for_tucking = self.arm.get_current_pose()
+        if pose_for_tucking.theta_z_deg > 0:
+            pose_for_tucking.theta_z_deg -= 180.0
+        else:
+            pose_for_tucking.theta_z_deg += 180.0
+        print('probe initial pose kp', probe_initial_pose_kp)
+        print('pose for tucking', pose_for_tucking)
+        return pose_for_tucking
+
     def model_params(self):
         self.model.conf = 0.25  # NMS confidence threshold
         self.model.iou = 0.45  # NMS IoU threshold
@@ -517,8 +548,9 @@ class WindCableAction(AbstractAction):
                     cv2.circle(image_copy, (int(center_box[0]), int(
                         center_box[1])), 4, (255, 255, 0), 1)
 
-                    # find the error in y direction
-                    error_x = center[0] - center_box[0]
+                    #TODO: Check if the probe can be picked near the tip 
+                    # find the error in x direction
+                    error_x = center[0] - center_box[0] + 20.0 #magic number for aligning the tip of probe to the center
 
                     # print the error on the image on the top left corner of the image
                     cv2.putText(image_copy, "Error: " + str(error_x.numpy()), (10, 30),
