@@ -300,6 +300,211 @@ class PlugRemoveSlidAction(AbstractAction):
         self.img_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
         return error_x, error_y
         
+    def align_black_port_2(self, save_debug_images=False):
+        
+        if save_debug_images:
+            self.save_debug_images()
+
+        # parameters
+        red_lower1 = [0, 50, 50]
+        red_upper1 = [4, 255, 255]
+        red_lower2 = [177, 50, 50]
+        red_upper2 = [180, 255, 255]
+        contours_area_threshold_low = 3000
+        contours_area_threshold_high = 9000
+        visualization_flag = False
+        #ROI crop parameters
+        min_x = 280
+        max_x = 1000
+        min_y = 100
+        max_y = 710
+        ## These are targets when tool_pose_z = approx 0.148 m
+        target_x = 356
+        target_y = 330
+
+        # display the image
+        # cv2.imshow("Input image", image)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        # crop to ROI
+        image = image[min_y:max_y, min_x:max_x]
+        image_original = image.copy()
+        image_original_copy_2 = image.copy()
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("Input ROI image", image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        # convert to HSV color space
+        image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        # define the lower and upper boundaries of the "red" HSV pixels
+        lower1 = np.array(red_lower1)
+        upper1 = np.array(red_upper1)
+        lower2 = np.array(red_lower2)
+        upper2 = np.array(red_upper2)
+
+        # create the mask
+        mask1 = cv2.inRange(image_hsv, lower1, upper1)
+        mask2 = cv2.inRange(image_hsv, lower2, upper2)
+        mask = cv2.bitwise_or(mask1, mask2)
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("Mask", mask)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            pass
+
+        # Apply morphological transformations to remove noise
+        kernel = np.ones((5, 5), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("Morphological Transformed Mask", mask)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        # find contours in the mask
+        contours, hierarchy = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # no contours found
+        if len(contours) == 0:
+            rospy.loginfo("[plug removal] No contours found!")
+            return None, None
+
+        # filter out small contours
+        filtered_contours = []
+        for contour in contours:
+            # Calculate area and perimeter of the contour
+            area = cv2.contourArea(contour)
+            perimeter = cv2.arcLength(contour, True)
+
+            if area < contours_area_threshold_low or area > contours_area_threshold_high:
+                continue
+
+            if visualization_flag:
+                print("Area: ", area)
+                # draw the contour on the original image
+                cv2.drawContours(image_original_copy_2, [
+                                contour], -1, (0, 255, 0), 2)
+                # show the result
+                cv2.imshow("Filtered Contour", image_original_copy_2)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+
+            filtered_contours.append(contour)
+
+        # no contours found
+        if len(filtered_contours) == 0:
+            rospy.loginfo("[plug removal] No filtered contours found!")
+            return None, None
+
+        # make a mask of the drawn contours
+        mask = np.zeros(image_original.shape[:2], dtype="uint8")
+        cv2.drawContours(mask, filtered_contours, -1, 255, -1)
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("Masked Contours", mask)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        # smooth the edges of the mask
+        mask = cv2.GaussianBlur(mask, (5, 5), 0)
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("Masked Contours blur", mask)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        # find hough circles
+        circles = cv2.HoughCircles(mask, cv2.HOUGH_GRADIENT, 1, 20,
+                                param1=50, param2=10, minRadius=40, maxRadius=60)
+
+        if visualization_flag:
+            # draw the circles
+            if circles is not None:
+                circles = np.uint16(np.around(circles))
+                for (centroid_x, centroid_y, r) in circles[0]:
+                    cv2.circle(image_original_copy_2,
+                            (centroid_x, centroid_y), r, (0, 255, 0), 2)
+
+                    if visualization_flag:
+                        print("Radius: ", r)
+                        # show the result
+                        cv2.imshow("Circles", image_original_copy_2)
+                        cv2.waitKey(0)
+                        cv2.destroyAllWindows()
+            else:
+                rospy.loginfo("[plug removal] red circle not found !")
+                return None, None
+
+        # get the biggest circle from the list
+        if circles is not None:
+            circles = np.uint16(np.around(circles))
+            circles = sorted(circles[0], key=lambda x: x[2], reverse=True)
+            (centroid_x, centroid_y, r) = circles[0]
+            cv2.circle(image_original,
+                    (centroid_x, centroid_y), r, (0, 255, 0), 2)
+
+            if visualization_flag:
+                # show the result
+                cv2.imshow("Final Circles", image_original)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+        else:
+            rospy.loginfo("[plug removal] red circle not found !")
+            return None, None
+
+        # display the center of the circle
+        cv2.circle(image_original, (centroid_x, centroid_y), 5, (0, 0, 255), -1)
+
+        # display the image with target points
+        cv2.circle(image_original, (target_x, target_y), 5, (255, 255, 0), -1)
+
+        # draw a horizontal line from the target point
+        cv2.line(image_original, (0, target_y),
+                (image.shape[1], target_y), (0, 0, 255), 2)
+        # draw a vertical line from the target point
+        cv2.line(image_original, (target_x, 0),
+                (target_x, image.shape[0]), (0, 0, 255), 2)
+
+        # calculate the error
+        error_x = target_x - centroid_x
+        error_y = target_y - centroid_y
+
+        # print the error in the image
+        cv2.putText(image_original, "Error: {}, {}".format(error_x, error_y),
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+
+        # draw a horizontal line from the centroid to the target point (x-axis only)
+        horizontal_line = [(centroid_x, centroid_y), (target_x, centroid_y)]
+        cv2.line(image_original, horizontal_line[0],
+                horizontal_line[1], (0, 255, 0), 2)
+
+        # draw a vertical line from the end of the horizontal line to the target point (y-axis only)
+        vertical_line = [(target_x, centroid_y), (target_x, target_y)]
+        cv2.line(image_original, vertical_line[0],
+                vertical_line[1], (0, 255, 0), 2)
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("FINAL IMAGE", image_original)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        self.img_pub.publish(self.bridge.cv2_to_imgmsg(image_original, "bgr8"))
+
+        return error_x, error_y
+
     def align_red_port(self, save_debug_images=False):
         min_x = 200
         max_x = 1000
