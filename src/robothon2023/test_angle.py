@@ -180,7 +180,6 @@ def ellipse_test():
         angle += np.deg2rad(90/travel_time)
 
         #ellipse motion
-
         velocity_door_ellipse = angular_velocity_door * math.sqrt( radius_z**2 * math.cos(angle)**2 +
                                                                     radius_y**2 * math.sin(angle)**2)
 
@@ -526,7 +525,6 @@ def push_door(self):  # push door is not cuurently used
 
     print("[probe_action] target reached")    
 
-
 def time_calculator():
 
     time = 5
@@ -536,6 +534,12 @@ def time_calculator():
         if abs(time_now - tt.time()) >= time:
             print("time is up")
             break
+def appending():
 
+    listi = [[5]]
+    listi.append(([1],[2]))
+
+    print(listi)
 if __name__ == "__main__":
-    time_calculator()
+
+    appending()
