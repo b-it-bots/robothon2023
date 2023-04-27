@@ -99,6 +99,8 @@ class PlugRemoveSlidAction(AbstractAction):
         max_insert_retries = rospy.get_param('~max_insert_retries', 5)
         while not inserted:
             self.run_visual_servoing(self.align_red_port, save_debug_images=False, run=True)
+            # open the gripper a bit to allow some compliance
+            self.arm.execute_gripper_command(0.9)
             inserted = self.move_down_insert()
             retries += 1
             if retries > max_insert_retries:
@@ -437,7 +439,7 @@ class PlugRemoveSlidAction(AbstractAction):
         linear_vel_z = rospy.get_param("~linear_vel_z", 0.005)
         force_z_diff_threshold = 10.0
         force_control_loop_rate = rospy.Rate(rospy.get_param("~force_control_loop_rate", 10.0))
-        plug_insertion_height_threshold = rospy.get_param("~plug_insertion_height_threshold", 0.125)
+        plug_insertion_height_threshold = rospy.get_param("~plug_insertion_height_threshold", 0.124)
         stop = False
         self.current_force_z = []
         num_retries = 0
