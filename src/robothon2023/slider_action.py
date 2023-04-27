@@ -222,12 +222,12 @@ class SliderAction(AbstractAction):
         """
         Move arm back using twist command
         """
-        retract_velocity = 0.04 # m/s
+        retract_velocity = 0.07 # m/s
         retract_twist_cmd = TwistCommand()
         retract_twist_cmd.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
         retract_twist_cmd.twist.linear_z = -retract_velocity # neg velocity for upwards movement
         self.cartesian_velocity_pub.publish(retract_twist_cmd)
-        rospy.sleep(1.5)
+        rospy.sleep(1)
         return True
 
     def stop_arm(self):
@@ -271,51 +271,6 @@ class SliderAction(AbstractAction):
         msg.pose.orientation = Quaternion(*q)
         msg = self.transform_utils.transformed_pose_with_retries(msg, 'base_link')
         return msg
-
-
-
-
-    def garr(self):
-
-        time = 4.5 # s
-        slider_velocity = round(distance/time , 3) # m/s
-
-        slider_velocity_cmd = TwistCommand()
-        slider_velocity_cmd.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        slider_velocity_cmd.twist.linear_x = slider_velocity * dv
-
-        rate_loop = rospy.Rate(10)
-
-        self.fm.reset_force_limit_flag()
-        self.fm.set_force_threshold(force=[3.0,3.0,3.0]) 
-        self.fm.enable_monitoring() 
-
-        # stop the while loop after 3 seconds
-        start_time = rospy.get_time()
-        while not self.fm.force_limit_flag and not rospy.is_shutdown() and (rospy.get_time() - start_time) < time: 
-            if self.fm.force_limit_flag:
-                rospy.loginfo(">> Force limit flag stopped the action <<")
-                break
-            self.cartesian_velocity_pub.publish(slider_velocity_cmd)
-            rate_loop.sleep()
-
-        success = self.stop_arm()
-        if not success:
-            return False
-        
-        self.fm.disable_monitoring()
-
-        distance = 0.01 ; time = 0.5 # move back 8 mm
-        velocity = distance/time
-
-        retract_twist = TwistCommand()
-        retract_twist.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        retract_twist.twist.linear_x = -velocity * dv
-
-        self.cartesian_velocity_pub.publish(retract_twist)
-        rospy.sleep(time)
-        self.stop_arm()
-
 
 
 
