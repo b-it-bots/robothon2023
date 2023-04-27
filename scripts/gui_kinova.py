@@ -262,6 +262,10 @@ class RobothonTask(object):
 
         msg_bl = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True, offset=[0.0, 0.0, -math.pi/2])
 
+        if msg_bl is None:
+            rospy.logerr("Failed to get transform from fixed transform dictionary")
+            messagebox.showerror("Fixed Transform", "Failed to get transform from. Please check TF tree")
+
         # send transform to robot
         kp = get_kinovapose_from_pose_stamped(msg_bl)
         kp.z += 0.05
