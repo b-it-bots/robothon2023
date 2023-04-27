@@ -444,7 +444,7 @@ class ProbeAction(AbstractAction):
         # rotate the arm to the probe cable direction and set the z to the pick pose z
         probe_pick_pose_from_holder = rospy.get_param("~probe_action_poses/probe_holder_pick_pose")
         probe_pick_pose_from_holder = get_kinovapose_from_list(probe_pick_pose_from_holder)
-        probe_pick_pose_from_holder.theta_z_deg = probe_cable_dir
+        # probe_pick_pose_from_holder.theta_z_deg = probe_cable_dir
 
         # move to the probe pick from holder pose
         rospy.loginfo("[probe_action] moving to pick probe from holder position")
@@ -463,15 +463,17 @@ class ProbeAction(AbstractAction):
         if not success:
             rospy.logerr("[probe_action] Failed to close the gripper")
             return False
-        
-        # move up a bit
-        probe_pick_pose_from_holder.z += 0.1
 
+        probe_pick_pose_from_holder = rospy.get_param("~probe_action_poses/probe_holder_pick_pose")
+        probe_pick_pose_from_holder = get_kinovapose_from_list(probe_pick_pose_from_holder)
+        probe_pick_pose_from_holder.z += 0.1
+    
         success = self.arm.send_cartesian_pose(probe_pick_pose_from_holder)
 
         if not success:
             rospy.logerr("[probe_action] Failed to move up the probe")
             return False
+        
         
         rospy.loginfo("[probe_action] probe picked")
 
@@ -548,6 +550,8 @@ class ProbeAction(AbstractAction):
         This function takes an image of the probe cable and returns the direction of the cable
         return: angle in degrees (in cv coordinate system)
         '''
+
+        rospy.logwarn("entered get probe")
 
         # crop the border of the image by 25%
         image = image[int(image.shape[0]*0.25):int(image.shape[0]*0.75), int(image.shape[1]*0.25):int(image.shape[1]*0.75)]
@@ -657,6 +661,7 @@ class ProbeAction(AbstractAction):
         
         # plot the angle of the cable direction wrt center
         cv2.putText(image, "angle: {:.2f} degrees".format(angle), (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 0, 255), 2)
+
         
         return angle
 
