@@ -5,28 +5,21 @@ This module contains a qui component for moving kinova arm
 """
 # -*- encoding: utf-8 -*-
 
-import os
-import json
 import math
 import threading
-import tkinter as Tkinter
 
 import tkinter as tk
 from tkinter import ttk
 from tkinter import messagebox
-import pyperclip
 
-import geometry_msgs.msg
 import rospy
-import tf
-import visualization_msgs.msg
 
-from typing import List, Tuple, Dict, Any, Union, Optional
+from typing import List, Tuple, Any, Optional
 
 from robothon2023.full_arm_movement import FullArmMovement
 from robothon2023.transform_utils import TransformUtils
 
-from utils.kinova_pose import KinovaPose, get_kinovapose_from_list, get_kinovapose_from_pose_stamped
+from utils.kinova_pose import get_kinovapose_from_list, get_kinovapose_from_pose_stamped
 
 from kortex_driver.srv import *
 from kortex_driver.msg import *
@@ -178,27 +171,22 @@ class RobothonTask(object):
 
         self.lists = [self.joint_angles, self.wind_cable_poses, self.byod_poses]
 
-        self.arm = FullArmMovement()
-        self.transform_utils = TransformUtils()
+        # self.arm = FullArmMovement()
+        # self.transform_utils = TransformUtils()
 
-        # clear faults
-        self.arm.clear_faults()
-        rospy.sleep(0.5)
-        self.arm.subscribe_to_a_robot_notification()
+        # # clear faults
+        # self.arm.clear_faults()
+        # rospy.sleep(0.5)
+        # self.arm.subscribe_to_a_robot_notification()
 
         self.master = tk.Tk()  # Updated to use tk instead of Tkinter
         self.master.title("Kinova Arm GUI")
         self.master.geometry("1500x2000")
 
-    def render_lists(self, frame: tk.Frame):
-        # joint angles
-        joint_angles = [(joint_angle, self.joint_angles[joint_angle]) for joint_angle in self.joint_angles.keys()]
+    def render_lists(self, noetbook: ttk.Notebook):
 
-        joint_anlges_list = ItemList()
-        joint_anlges_list.add_items(joint_angles)
-
-        joint_angles_window = ListWindow(frame, 'joint angles', joint_anlges_list, self.joint_angles_cb)
-        joint_angles_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # keep 3 lists in a frame
+        frame = ttk.Frame(noetbook)
 
         # # trajectories
         # trajectories = [(trajectory, self.trajectories[trajectory]) for trajectory in self.trajectories.keys()]
@@ -210,10 +198,10 @@ class RobothonTask(object):
         # trajectories_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # fixed transforms
-        fixed_transform_link_names = [link_name.replace('board_to_', '') + '_link' for link_name in self.fixed_transforms]
+        fixed_transform_link_names = [(link_name.replace('board_to_', '') + '_link', '') for link_name in self.fixed_transforms]
         
         fixed_transforms_list = ItemList()
-        fixed_transforms_list.add_items((fixed_transform_link_names, fixed_transform_link_names))
+        fixed_transforms_list.add_items(fixed_transform_link_names)
 
         fixed_transforms_window = ListWindow(frame, 'fixed transforms', fixed_transforms_list, self.fixed_transforms_cb)
         fixed_transforms_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
@@ -229,17 +217,6 @@ class RobothonTask(object):
         wind_cable_poses_window = ListWindow(frame, 'winding poses', wind_cable_poses_list, self.wind_cable_poses_cb)
         wind_cable_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        # byod poses
-        byod_poses = []
-        for key, i in zip(self.byod_poses.keys(), self.byod_poses.values()):
-            byod_poses.append((key, get_kinovapose_from_list(list(i.values()))))
-
-        byod_poses_list = ItemList()
-        byod_poses_list.add_items(byod_poses)
-
-        byod_poses_window = ListWindow(frame, 'byod poses', byod_poses_list, self.byod_poses_cb)
-        byod_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-
         # probe action poses
         probe_action_poses = [(pose, get_kinovapose_from_list(self.probe_action_poses[pose])) for pose in self.probe_action_poses.keys()]
 
@@ -248,6 +225,34 @@ class RobothonTask(object):
 
         probe_action_poses_window = ListWindow(frame, 'probe action poses', probe_action_poses_list, self.probe_action_poses_cb)
         probe_action_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # second frame
+        frame2 = ttk.Frame(noetbook)
+
+        # joint angles
+        joint_angles = [(joint_angle, self.joint_angles[joint_angle]) for joint_angle in self.joint_angles.keys()]
+
+        joint_anlges_list = ItemList()
+        joint_anlges_list.add_items(joint_angles)
+
+        joint_angles_window = ListWindow(frame2, 'joint angles', joint_anlges_list, self.joint_angles_cb)
+        joint_angles_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # byod poses
+        byod_poses = []
+        for key, i in zip(self.byod_poses.keys(), self.byod_poses.values()):
+            byod_poses.append((key, get_kinovapose_from_list(list(i.values()))))
+
+        byod_poses_list = ItemList()
+        byod_poses_list.add_items(byod_poses)
+
+        byod_poses_window = ListWindow(frame2, 'byod poses', byod_poses_list, self.byod_poses_cb)
+        byod_poses_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        # add frames to notebook
+        noetbook.add(frame, text='frame1')
+        noetbook.add(frame2, text='frame2')
+        
 
     def fixed_transforms_cb(self, item: Item):
         link_name = item.name
@@ -377,7 +382,7 @@ class RobothonTask(object):
 
         self.base_frame_text = tk.Text(frame, height=3, width=30, font=("Helvetica", 10))
         self.base_frame_text.grid(row=2, column=0, padx=10, pady=10, sticky="ew")
-        self.base_frame_text.config(state='disabled')
+        # self.base_frame_text.config(state='disabled')
         self.base_frame_text.configure()
 
         # Create a copy button for the base frame text
@@ -394,7 +399,7 @@ class RobothonTask(object):
 
         self.board_frame_text = tk.Text(frame, height=3, width=30, font=("Helvetica", 10))
         self.board_frame_text.grid(row=4, column=0, padx=10, pady=10, sticky="ew")
-        self.board_frame_text.config(state='disabled')
+        # self.board_frame_text.config(state='disabled')
 
         # Create a copy button for the board frame text
         self.copy_board_frame_button = ttk.Button(frame, text="Copy", command=lambda: self.copy_to_clipboard(self.board_frame_text.get("1.0", "end-1c")))
@@ -410,7 +415,7 @@ class RobothonTask(object):
 
         self.joint_angles_text = tk.Text(frame, height=3, width=30, font=("Helvetica", 10))
         self.joint_angles_text.grid(row=6, column=0, padx=10, pady=10, sticky="ew")
-        self.joint_angles_text.config(state='disabled')
+        # self.joint_angles_text.config(state='disabled')
 
         # Create a copy button for the joint angles text
         self.copy_joint_angles_button = ttk.Button(frame, text="Copy", command=lambda: self.copy_to_clipboard(self.joint_angles_text.get("1.0", "end-1c")))
@@ -542,14 +547,14 @@ class RobothonTask(object):
         self.joint_angles_text.config(state='disabled')
 
     def create_window(self):
+
+        # set the notebook 
+        self.noetbook = ttk.Notebook(self.master)
+        self.noetbook.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")  # Updated to use grid manager
+        self.master.grid_rowconfigure(0, weight=1)  # Configure row 0 to take all extra space
         
-
-        lists_frame = tk.Frame(self.master)
-        lists_frame.grid(row=0, column=0, padx=10, pady=10, sticky="nsew")  # Updated to use grid manager
-        self.master.grid_rowconfigure(0, weight=1)  # Configure row 0 to take normal height
-
         # Create and configure the window's contents
-        self.render_lists(lists_frame)
+        self.render_lists(self.noetbook)
 
         gripper_frame = tk.Frame(self.master)
         gripper_frame.grid(row=1, column=0, padx=10, pady=10, sticky="nsew")  # Updated to use grid manager
@@ -571,14 +576,19 @@ class RobothonTask(object):
         t.daemon = True
         t.start()
 
-        rospy.signal_shutdown("GUI closed")
-
-
+    def on_shutdown(self):
+        rospy.loginfo("Shutting down")
+        self.master.destroy()
 
 if __name__ == "__main__":
     rospy.init_node('robothon_task')
     task = RobothonTask()
-    task.create_window()
-    print ("crate window finished")
-    rospy.spin()
+    rospy.on_shutdown(task.on_shutdown)
+    try:
+        task.create_window()
+        rospy.spin()
+    except rospy.ROSInterruptException or KeyboardInterrupt:
+        rospy.logerr('Got ROSInterruptException or KeyboardInterrupt, shutting down')
+        rospy.signal_shutdown("GUI interrupted")
+        sys.exit(0)
 
