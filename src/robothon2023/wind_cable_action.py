@@ -603,6 +603,10 @@ class WindCableAction(AbstractAction):
         # get the current date and time
         now = datetime.datetime.now()
 
+        # check if the directory exists
+        if not os.path.exists(self.save_debug_image_dir):
+            os.makedirs(self.save_debug_image_dir)
+
         if self.image is not None:
             cv2.imwrite(os.path.join(
                 self.save_debug_image_dir, 'WindCable_debug_image_{}.png'.format(now)), self.image)
