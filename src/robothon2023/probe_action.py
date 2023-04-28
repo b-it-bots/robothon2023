@@ -22,6 +22,9 @@ import cv2
 import pdb
 from scipy.spatial.distance import cdist
 import math
+import os
+import datetime
+import yolov5
 
 class ProbeAction(AbstractAction):
     def __init__(self, arm: FullArmMovement, transform_utils: TransformUtils) -> None:
@@ -35,6 +38,10 @@ class ProbeAction(AbstractAction):
         self.probe_cable_dir_debug_pub = rospy.Publisher('/probe_cable_dir_debug', Image, queue_size=1)
         self.visual_servo_debug_img = rospy.Publisher('/visual_servoing_debug_img', Image, queue_size=1)
         self.image_sub = rospy.Subscriber('/camera/color/image_raw', sensor_msgs.msg.Image, self.image_cb)
+        self.model = yolov5.load(
+            '/home/b-it-bots/temp/robothon/weights/door_knob/best_nano_2.pt')
+        self.model_params()
+        self.save_debug_image_dir = '/home/b-it-bots/temp/robothon/door_knob'
         
         self.debug = rospy.get_param("~debug", False)
         self.bridge = CvBridge()
@@ -345,8 +352,8 @@ class ProbeAction(AbstractAction):
 
         '''
         rospy.loginfo("Visual servoing to door knob")
-        success = self.run_visual_servoing(self.get_door_knob_error, target_height = door_knob_kinova_pose.z)
-
+        success = self.run_visual_servoing(self.get_door_knob_error, target_height = door_knob_kinova_pose.z, save_debug_images=True)
+        
         # record the current tool pose
         current_tool_pose = self.arm.get_current_pose()
 
@@ -518,7 +525,7 @@ class ProbeAction(AbstractAction):
         max_probe_retries = rospy.get_param("~max_probe_retries", 5)
         while not probed:
             rospy.loginfo("Trying probe for %d th time" % retries)
-            self.run_visual_servoing(self.get_probe_point_error, target_height=0.3)
+            self.run_visual_servoing(self.get_probe_point_error, target_height=0.3, save_debug_images=False)
             probed = self.move_down_and_probe()
             rospy.loginfo("Probed: %d" % probed)
             retries += 1
@@ -701,7 +708,11 @@ class ProbeAction(AbstractAction):
         
         return angle
 
-    def get_door_knob_error(self):
+    def get_door_knob_error(self, save_debug_images=False):
+
+        if save_debug_images:
+            self.save_debug_image()
+
         '''
         Get error for aligning with door knob using visual servoing
         '''
@@ -738,6 +749,87 @@ class ProbeAction(AbstractAction):
 
         # cv2.waitKey(1)
         return error_x, error_y
+    
+    def model_params(self):
+        self.model.conf = 0.25  # NMS confidence threshold
+        self.model.iou = 0.45  # NMS IoU threshold
+        self.model.agnostic = False  # NMS class-agnostic
+        self.model.multi_label = False  # NMS multiple labels per box
+        self.model.max_det = 1000  # maximum number of detections per image
+
+    def get_door_knob_error_2(self, save_debug_images=False):
+        
+        if save_debug_images:
+            self.save_debug_image()
+
+        image_copy = self.image.copy()
+
+        target_x = 362
+        target_y = 280
+
+        results = self.model(self.image, size=640)  # try 480, 512, 640
+
+        # handle the error with try and except
+        try:
+            if results.pred[0] is not None:  # if there are any detections
+                predictions = results.pred[0]
+                if predictions[:, 4]:
+                    
+                    scores = predictions[:, 4]
+
+                    # if more than one detection then take the one with highest score
+                    max_score_index = scores.argmax()
+                    max_score = scores[max_score_index]
+
+                    # get the bounding box of the detection with highest score
+                    # convert it to numpy array
+                    boxes = predictions[max_score_index:, :4].asnumpy()
+
+                    #TODO: add some conditions to avoid wrong detections, eg. like the area of the bounding box
+                    boxes = predictions[:, :4]  # x1, y1, x2, y2
+
+                    # find the center of the image
+                    center = (image_copy.shape[1] / 2, image_copy.shape[0] / 2)
+
+                    # draw vertical line at the center of the image
+                    cv2.line(image_copy, (int(center[0]), 0),
+                             (int(center[0]), image_copy.shape[0]), (0, 0, 255), 1)
+
+                    # find the center of the bounding box
+                    center_box = (boxes[0][0] + boxes[0][2]) / \
+                        2, (boxes[0][1] + boxes[0][3]) / 2
+
+                    # show the center of the bounding box on the image
+                    cv2.circle(image_copy, (int(center_box[0]), int(
+                        center_box[1])), 4, (255, 255, 0), 1)
+
+                    # find the error
+                    error_x = target_x - center_box[0]
+                    error_y = target_y - center_box[1]
+
+                    # print the error on the image on the top left corner of the image
+                    cv2.putText(image_copy, "error_x: {:.2f} error_y: {:.2f}".format(
+                        error_x, error_y), (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+
+                    # # draw a horizontal line from the centroid to the target point (x-axis only)
+                    horizontal_line = [(center_box[0], center_box[1]), (target_x, center_box[1])]
+                    cv2.line(image_copy, horizontal_line[0], horizontal_line[1], (0, 255, 0), 2)
+                    
+                    # draw a vertical line from the end of the horizontal line to the target point (y-axis only)
+                    vertical_line = [(target_x, center_box[1]), (target_x, target_y)]
+                    cv2.line(image_copy, vertical_line[0], vertical_line[1], (0, 255, 0), 2)
+                    
+                    # publish the debug image
+                    self.img_pub.publish(
+                        self.bridge.cv2_to_imgmsg(image_copy, "bgr8"))
+
+                    return error_x, error_y
+            else:
+                print("No predictions")
+                return None, None
+        except:
+            print("No predictions")
+            return None, None
 
     def get_orange_mask(self, img):
         lower = np.array([80, 120, 140])
@@ -747,7 +839,11 @@ class ProbeAction(AbstractAction):
         mask = erode(mask)
         return mask
 
-    def get_probe_point_error(self):
+    def get_probe_point_error(self, save_debug_images=False):
+
+        if save_debug_images:
+            self.save_debug_image()
+
         '''
         Get error for circuit probe point for visual servoing
         '''
@@ -773,7 +869,7 @@ class ProbeAction(AbstractAction):
         error_y = target_y - (cy + start_y)
         return error_x, error_y
 
-    def run_visual_servoing(self, vs_target_fn, target_height):
+    def run_visual_servoing(self, vs_target_fn, target_height, save_debug_images=False):
         success = False
         rospy.loginfo("Moving to correct height")
         while not rospy.is_shutdown():
@@ -798,7 +894,7 @@ class ProbeAction(AbstractAction):
                 continue
             msg = kortex_driver.msg.TwistCommand()
             msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-            error_x, error_y = vs_target_fn()
+            error_x, error_y = vs_target_fn(save_debug_images)
             if error_x is None:
                 msg.twist.linear_x = 0.0
             else:
@@ -933,4 +1029,17 @@ class ProbeAction(AbstractAction):
             pose = self.get_kinova_pose(pose_name)
             pose_list.append(pose)
         return pose_list
+    
+    def save_debug_image(self):
+
+        # get the current date and time
+        now = datetime.datetime.now()
+
+        # check if the directory exists
+        if not os.path.exists(self.save_debug_image_dir):
+            os.makedirs(self.save_debug_image_dir)
+
+        if self.image is not None:
+            cv2.imwrite(os.path.join(
+                self.save_debug_image_dir, 'DoorKnob_debug_image_{}.png'.format(now)), self.image)
 
