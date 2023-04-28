@@ -30,7 +30,7 @@ class TaskSM(object):
         self.board_detector_event_in = rospy.Publisher('~board_detector_event_in', std_msgs.msg.String, queue_size=1)
         self.poi_event_in = rospy.Publisher('~poi_event_in', std_msgs.msg.String, queue_size=1)
         self.init_board_pose_sub = rospy.Subscriber('~init_approximate_board_pose', geometry_msgs.msg.PoseStamped, self.board_pose_cb)
-        self.perceive_board_pose = rospy.get_param("~perceive_board_pose")
+        self.perceive_board_pose = rospy.get_param("~joint_angles/perceive_board_pose")
         self.arm = FullArmMovement()
         self.tu = TransformUtils()
         self.task_order = rospy.get_param('~task_order')
@@ -74,17 +74,17 @@ class TaskSM(object):
             if not success:
                 rospy.logerr('%s action failed' % self.action_executors[task_id].__class__.__name__)
         # after we finish all tasks, move back to perceive board
-        success = self.move_arm_to_perceive_board()
+        success = self.move_arm_to_perceive_board(clear_faults=False)
 
 
-    def move_arm_to_perceive_board(self):
-        self.arm.clear_faults()
-        self.arm.subscribe_to_a_robot_notification()
-        perceive_board_pose = get_kinovapose_from_list(self.perceive_board_pose)
+    def move_arm_to_perceive_board(self, clear_faults=True):
+        if clear_faults:
+            self.arm.clear_faults()
+            self.arm.subscribe_to_a_robot_notification()
         success = False
         retries = 0
         while not success and retries < 3:
-            success = self.arm.send_cartesian_pose(perceive_board_pose)
+            success = self.arm.send_joint_angles(self.perceive_board_pose)
             retries += 1
         self.arm.execute_gripper_command(0.0)
         return success

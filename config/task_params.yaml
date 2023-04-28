@@ -9,7 +9,6 @@ debug: true
 pre_height_above_button: 0.08
 linear_vel_z: 0.01 # positive going up, negative going down; NOTE: changing this affects force_z_diff_threshold. Low velocities are more stable
 force_z_diff_threshold: 3.0 # if diff between current force and mean force is greater, stop
-perceive_board_pose: [0.4417586028575897, 0.05457466468214989, 0.4319988489151001, 179.99813842773438, 0.002015814185142517, 152.99887084960938]
 # plug insertion
 plug_insertion_height_threshold: 0.125 # if we go below this height, we've inserted the plug
 max_insert_retries: 5 # number of times to retry inserting plug if we don't succeed

@@ -4,6 +4,7 @@ import rospy
 import numpy as np
 import math 
 from kortex_driver.msg import TwistCommand, CartesianReferenceFrame
+import kortex_driver.msg
 
 from robothon2023.abstract_action import AbstractAction
 from robothon2023.full_arm_movement import FullArmMovement
@@ -21,9 +22,15 @@ class SliderAction(AbstractAction):
         self.tf_utils = transform_utils
         self.listener = tf.TransformListener()
         self.slider_pose = PoseStamped()
+        self.current_force_z = []
         
         self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
+        self.base_feedback_sub = rospy.Subscriber('/my_gen3/base_feedback', kortex_driver.msg.BaseCyclic_Feedback, self.base_feedback_cb)
       
+    def base_feedback_cb(self, msg):
+        self.current_force_z.append(msg.base.tool_external_wrench_force_z)
+        if len(self.current_force_z) > 25:
+            self.current_force_z.pop(0)
 
     def pre_perceive(self) -> bool:
         print ("in pre perceive")
@@ -43,9 +50,13 @@ class SliderAction(AbstractAction):
         if not self.move_arm_to_slider():
             return False
 
-        rospy.sleep(1)
         rospy.loginfo(">> Approaching slider with caution <<")
-        success = self.arm.move_down_with_caution(distance=0.05, time=3.0, force_threshold=[4,4,4.5], retract_dist=0.01, tool_z_thresh=0.1095)
+        #success = self.arm.move_down_with_caution(distance=0.05, time=3.0, force_threshold=[4,4,4.5], retract_dist=0.01, tool_z_thresh=0.1095)
+        #success = self.move_down_with_caution()
+        board_height = rospy.get_param('/board_height', 0.1157)
+        current_pose = self.arm.get_current_pose()
+        current_pose.z = board_height
+        success = self.arm.send_cartesian_pose(current_pose)
         if not success:
             return False
         #if not self.approach_slider_with_caution():
@@ -76,8 +87,11 @@ class SliderAction(AbstractAction):
             return False
 
         rospy.loginfo(">> Retract arm back <<")
-        if not self.retract_arm_back():
-            return False
+        current_pose = self.arm.get_current_pose()
+        current_pose.z += 0.03
+        self.arm.send_cartesian_pose(current_pose)
+        #if not self.retract_arm_back():
+        #    return False
 
         rospy.loginfo(">> Stopping arm <<")
         if not self.stop_arm():
@@ -107,6 +121,40 @@ class SliderAction(AbstractAction):
     def tooltip_pose_callback(self, msg):
         self.tooltip_pose_z_with_base = msg.base.tool_pose_z
 
+    def move_down_with_caution(self):
+        self.current_force_z = []
+        num_retries = 0
+        loop_rate = rospy.Rate(10)
+        force_z_diff_threshold = rospy.get_param("~force_z_diff_threshold", 4.0)
+        stop = False
+
+        while not rospy.is_shutdown():
+            if len(self.current_force_z) < 20:
+                num_retries += 1
+                if num_retries > 100:
+                    rospy.logerr("No force measurements received")
+                    break
+                loop_rate.sleep()
+                continue
+            msg = kortex_driver.msg.TwistCommand()
+            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            msg.twist.linear_z = 0.01
+            if abs(np.mean(self.current_force_z) - self.current_force_z[-1]) > force_z_diff_threshold:
+                stop = True
+                msg.twist.linear_z = 0.0
+                msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED #publish 0 vel in mixed frame
+            if self.arm.get_current_pose().z < 0.11:
+                stop = True
+                msg.twist.linear_z = 0.0
+                msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED #publish 0 vel in mixed frame
+            self.cartesian_velocity_pub.publish(msg)
+            if stop:
+                break
+            loop_rate.sleep()
+        current_pose = self.arm.get_current_pose()
+        current_pose.z += 0.01
+        self.arm.send_cartesian_pose(current_pose)
+        return True
 
     def move_arm_to_slider(self):
         """
@@ -190,7 +238,7 @@ class SliderAction(AbstractAction):
             distance = 0.0255
         elif direction == "backward":
             dv = -1
-            distance = 0.03
+            distance = 0.035
         elif direction == "None":
             print("No direction specified")
             return False
@@ -214,7 +262,7 @@ class SliderAction(AbstractAction):
         # print("force_x: ", force_x)
         # print("force_y: ", force_y)
         
-        success = self.arm.move_down_with_caution(distance = dv*distance, time = 3,
+        success = self.arm.move_down_with_caution(distance = dv*distance, time = 4,
                                 force_threshold=[5,5,3], approach_axis='x',
                                 retract = False,
                                 retract_dist = 0.01) 

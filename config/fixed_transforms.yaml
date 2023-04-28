@@ -2,11 +2,11 @@ fixed_transforms:
   # all transforms are x, y, yaw (in meters and radians respectively)
   board_to_blue_button: [0.0, 0.0, 0]
   board_to_red_button: [0.015, 0.0, 0]
-  board_to_slider_start: [0.096, -0.04, 0]
-  board_to_slider_end: [0.0665, -0.04, 0]
+  board_to_slider_start: [0.096, -0.035, 0]
+  board_to_slider_end: [0.0665, -0.035, 0]
   board_to_meter_plug_black: [0.0, -0.058, 0]
   board_to_meter_plug_red: [0.025, -0.058, 0]
-  board_to_door_knob: [0.01, -0.142, 0]
+  board_to_door_knob: [0.0117, -0.144, 0]
   board_to_gui: [0.06, 0, 0]
   board_to_probe_initial: [0.0153, -0.20, 0] # grasp probe from holder on board
   board_to_probe_circuit: [0.05, -0.142, 0] # circuit to be probed

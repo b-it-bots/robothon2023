@@ -1,6 +1,6 @@
 wind_poses:
   traj1:
-    gripper: 0.95
+    gripper: 1.0
     poses:
       pose1:
         position: 
@@ -51,7 +51,7 @@ wind_poses:
 
 
   traj3:
-    gripper: 0.95
+    gripper: 1.0
     poses:
       pose5:
         position: 
@@ -113,7 +113,7 @@ wind_poses:
 
 
   traj5:
-    gripper: 0.95
+    gripper: 1.0
     poses:
       pose10:
         position: 
@@ -164,7 +164,7 @@ wind_poses:
 
 
   traj7:
-    gripper: 0.95
+    gripper: 1.0
     poses:
       pose50:
         position: 

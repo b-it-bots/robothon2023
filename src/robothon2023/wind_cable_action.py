@@ -81,7 +81,7 @@ class WindCableAction(AbstractAction):
 
         kp = self.arm.get_current_pose()
 
-        kp.z = 0.042
+        kp.z = 0.035
 
         if not self.arm.send_cartesian_pose(kp):
             return False
@@ -224,9 +224,12 @@ class WindCableAction(AbstractAction):
         # # go to the probe pick perceive position above the holder
         self.arm.execute_gripper_command(0.0)
 
-        perceive_board_pose = rospy.get_param("~perceive_board_pose")
-        perceive_board_pose = get_kinovapose_from_list(perceive_board_pose)
-        success = self.arm.send_cartesian_pose(perceive_board_pose)
+        current_pose = self.arm.get_current_pose()
+        current_pose += 0.05
+        self.arm.send_cartesian_pose(current_pose)
+
+        perceive_board_pose = rospy.get_param("~joint_angles/perceive_board_pose")
+        success = self.arm.send_joint_angles(perceive_board_pose)
 
         safe_pose_after_probe_placement = rospy.get_param("~probe_action_poses/safe_pose_after_probe_placement")
         safe_pose_after_probe_placement = get_kinovapose_from_list(safe_pose_after_probe_placement)
@@ -279,7 +282,7 @@ class WindCableAction(AbstractAction):
         rospy.loginfo('[probe_action] reached probe initial position')
 
         rospy.loginfo("[probe_action] moving away from holder")
-        success = self.arm.move_with_velocity(0.03, 0.75, 'y')
+        success = self.arm.move_with_velocity(0.04, 0.75, 'y')
         if not success:
             rospy.logerr("[probe_action] Failed to move away from holder")
             return False
@@ -305,7 +308,7 @@ class WindCableAction(AbstractAction):
         # move the probe back in x direction for 4cm
         #success = self.arm.move_with_velocity(-0.025, 3, 'y')
 
-        self.arm.move_down_with_caution(approach_axis='y', distance=-0.02, force_threshold=[5,5, 10])
+        self.arm.move_down_with_caution(approach_axis='y', distance=-0.03, force_threshold=[5,5, 10])
 
         if not success:
             rospy.logerr("Failed to move back the probe")
@@ -494,6 +497,10 @@ class WindCableAction(AbstractAction):
             return (None, None)
     
     def find_and_save_tucking_pose(self):
+
+        current_pose = self.arm.get_current_pose()
+        current_pose.z = 0.11
+        self.arm.send_cartesian_pose(current_pose)
         probe_initial_pose_kp = self.transform_utils.transform_pose_frame_name(reference_frame_name="probe_initial_link",
                                                                       target_frame_name="base_link",
                                                                       offset_linear=[0.0, 0.00, 0.08],

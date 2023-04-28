@@ -89,7 +89,7 @@ class PlugRemoveSlidAction(AbstractAction):
     def act(self) -> bool:
         print ("in act")
         #Allign camera
-        self.run_visual_servoing(self.align_black_port, save_debug_images=True, run=True)
+        self.run_visual_servoing(self.align_black_port_2, save_debug_images=True, run=True)
         current_pose = self.arm.get_current_pose()
         current_pose.z -= 0.03
         self.arm.send_cartesian_pose(current_pose)
@@ -104,7 +104,7 @@ class PlugRemoveSlidAction(AbstractAction):
         while not inserted:
             self.run_visual_servoing(self.align_red_port, save_debug_images=False, run=True)
             # open the gripper a bit to allow some compliance
-            self.arm.execute_gripper_command(0.9)
+            # self.arm.execute_gripper_command(0.9)
             inserted = self.move_down_insert(grasp_height)
             retries += 1
             if retries > max_insert_retries:
@@ -330,7 +330,7 @@ class PlugRemoveSlidAction(AbstractAction):
         # cv2.destroyAllWindows()
 
         # crop to ROI
-        image = image[min_y:max_y, min_x:max_x]
+        image = self.image[min_y:max_y, min_x:max_x]
         image_original = image.copy()
         image_original_copy_2 = image.copy()
 
@@ -513,7 +513,9 @@ class PlugRemoveSlidAction(AbstractAction):
         min_y = 100
         max_y = 520
         ## These are targets when tool_pose_z = approx 0.148 m
-        target_x = 570
+        ## if robot ends up too far back, increase target_y
+        ## if robot ends up too far right, increase target_x
+        target_x = 566
         target_y = 318
         color_img = self.image[min_y:max_y, min_x:max_x]
         img = cv2.cvtColor(color_img, cv2.COLOR_BGR2GRAY)
@@ -729,7 +731,7 @@ class PlugRemoveSlidAction(AbstractAction):
         rospy.loginfo("Moving forward")
         msg = kortex_driver.msg.TwistCommand()
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        for idx in range(25):
+        for idx in range(23):
             msg.twist.linear_y = 0.01
             self.cart_vel_pub.publish(msg)
             self.loop_rate.sleep()
@@ -737,6 +739,7 @@ class PlugRemoveSlidAction(AbstractAction):
         self.cart_vel_pub.publish(msg)
         self.loop_rate.sleep()
         self.cart_vel_pub.publish(msg)
+
 
     def save_debug_images(self):
         rospy.loginfo_once("Saving debug images")
