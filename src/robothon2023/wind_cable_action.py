@@ -381,15 +381,19 @@ class WindCableAction(AbstractAction):
         contours_area_threshold_min = 5000
         contours_area_threshold_max = 30000
 
+        # image center coordinates
+        image_center_x = self.image.shape[1] // 2
+        image_center_y = self.image.shape[0] // 2
+
         # draw a rectangle on the image from the center of the image
         x_axis_right = 300
         x_axis_left = 300
         y_axis_top = 10
-        y_axis_bottom = self.image.shape[0] # y_axis_bottom is height of the image
+        y_axis_bottom = 200
 
         # crop the ROI from the image with the rectangle
-        roi = self.image[self.image.shape[0] // 2 - y_axis_top:self.image.shape[0] // 2 + y_axis_bottom,
-                    self.image.shape[1] // 2 - x_axis_left:self.image.shape[1] // 2 + x_axis_right]
+        roi = self.image[image_center_y - y_axis_top:image_center_y +
+                            y_axis_bottom, image_center_x - x_axis_left:image_center_x + x_axis_right]
 
         cv2.rectangle(roi, (0, 0), (roi.shape[1], roi.shape[0]), (255, 255, 255), 20)
 
