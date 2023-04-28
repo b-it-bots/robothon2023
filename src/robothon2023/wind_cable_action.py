@@ -225,7 +225,7 @@ class WindCableAction(AbstractAction):
         self.arm.execute_gripper_command(0.0)
 
         current_pose = self.arm.get_current_pose()
-        current_pose += 0.05
+        current_pose.z += 0.05
         self.arm.send_cartesian_pose(current_pose)
 
         perceive_board_pose = rospy.get_param("~joint_angles/perceive_board_pose")
