@@ -43,7 +43,7 @@ class WindCableAction(AbstractAction):
 
         self.arm.execute_gripper_command(0.0)
 
-        '''
+        
         # get the pre-perceive pose from tf
         msg = PoseStamped()
         msg.header.frame_id = "wind_cable_link"
@@ -60,7 +60,7 @@ class WindCableAction(AbstractAction):
         if not self.arm.send_cartesian_pose(kp):
             rospy.logerr("Failed to send pre-perceive pose to arm")
             return False
-        
+        '''
         kp.z = 0.0316
 
         # send to arm
@@ -78,6 +78,15 @@ class WindCableAction(AbstractAction):
         rospy.loginfo("Starting visual servoing")
         # TODO: fix the visual servoing
         success = self.run_visual_servoing(self.detect_wind_cable, True, error_thresholds = [40, 50])
+
+        kp = self.arm.get_current_pose()
+
+        kp.z = 0.042
+
+        if not self.arm.send_cartesian_pose(kp):
+            return False
+        
+        self.arm.execute_gripper_command(0.95)
 
         if not success:
             return False
@@ -207,6 +216,7 @@ class WindCableAction(AbstractAction):
             self.arm.execute_gripper_command(gripper_angle)
             success = self.arm.traverse_waypoints(waypoints)
 
+        self.arm.execute_gripper_command(0.0)
         return success
     
     def pick_probe_from_holder(self):
@@ -269,7 +279,7 @@ class WindCableAction(AbstractAction):
         rospy.loginfo('[probe_action] reached probe initial position')
 
         rospy.loginfo("[probe_action] moving away from holder")
-        success = self.arm.move_with_velocity(0.06, 1.5, 'y')
+        success = self.arm.move_with_velocity(0.03, 0.75, 'y')
         if not success:
             rospy.logerr("[probe_action] Failed to move away from holder")
             return False
@@ -295,7 +305,7 @@ class WindCableAction(AbstractAction):
         # move the probe back in x direction for 4cm
         #success = self.arm.move_with_velocity(-0.025, 3, 'y')
 
-        self.arm.move_down_with_caution(approach_axis='y', distance=0.05, force_threshold=[5,5, 10])
+        self.arm.move_down_with_caution(approach_axis='y', distance=-0.02, force_threshold=[5,5, 10])
 
         if not success:
             rospy.logerr("Failed to move back the probe")
@@ -303,8 +313,9 @@ class WindCableAction(AbstractAction):
 
         self.arm.execute_gripper_command(0.6) # open the gripper
 
-        # move the arm up in z axis
-        #success = self.arm.move_with_velocity(0.03, 3, 'z')
+        # move away from holder
+        success = self.arm.send_cartesian_pose(pose_for_tucking_kp, max_lin_vel=0.01)
+
         return True
 
     def run_visual_servoing(self, vs_target_fn, run=True, error_thresholds=[5, 10]):
@@ -364,7 +375,7 @@ class WindCableAction(AbstractAction):
         circularity_threshold_min = 0.0
         circularity_threshold_max = 0.5
         contours_area_threshold_min = 5000
-        contours_area_threshold_max = 10000
+        contours_area_threshold_max = 30000
 
         # draw a rectangle on the image from the center of the image
         x_axis_right = 300
@@ -402,9 +413,6 @@ class WindCableAction(AbstractAction):
         # draw the contours on the image
         cv2.drawContours(roi_copy, contours, -1, (0, 255, 0), 2)
 
-        # cv2.imshow("Contours", roi_copy)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
 
         # filter out black contours
         filtered_contours = []
@@ -415,6 +423,7 @@ class WindCableAction(AbstractAction):
             perimeter = cv2.arcLength(contour, True)
             # filter out small contours
             if area < contours_area_threshold_min or area > contours_area_threshold_max:
+                rospy.logwarn("Removing contour with area: %.2f, min:%.2f, max: %.2f" % (area, contours_area_threshold_min, contours_area_threshold_max))
                 continue
 
             # print("Area: {}".format(area))
@@ -505,8 +514,6 @@ class WindCableAction(AbstractAction):
             pose_for_tucking.theta_z_deg -= 180.0
         else:
             pose_for_tucking.theta_z_deg += 180.0
-        print('probe initial pose kp', probe_initial_pose_kp)
-        print('pose for tucking', pose_for_tucking)
         return pose_for_tucking
 
     def model_params(self):

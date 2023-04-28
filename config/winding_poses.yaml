@@ -142,8 +142,8 @@ wind_poses:
     poses:
       pose30:
         position: 
-          x: -0.02199
-          y: 0.08323
+          x: -0.0122
+          y: 0.0795
           z: 0.09836
         orientation: 
           x: 0.9020339021872683

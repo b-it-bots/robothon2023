@@ -73,6 +73,8 @@ class TaskSM(object):
             success = self.action_executors[task_id].do()
             if not success:
                 rospy.logerr('%s action failed' % self.action_executors[task_id].__class__.__name__)
+        # after we finish all tasks, move back to perceive board
+        success = self.move_arm_to_perceive_board()
 
 
     def move_arm_to_perceive_board(self):

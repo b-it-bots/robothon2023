@@ -90,7 +90,11 @@ class PlugRemoveSlidAction(AbstractAction):
         print ("in act")
         #Allign camera
         self.run_visual_servoing(self.align_black_port, save_debug_images=True, run=True)
+        current_pose = self.arm.get_current_pose()
+        current_pose.z -= 0.03
+        self.arm.send_cartesian_pose(current_pose)
         self.move_down_velocity_control()
+        grasp_height = self.current_height
         self.arm.execute_gripper_command(1.0) #close gripper
         self.move_up_velocity_control()
         self.move_forward()
@@ -101,7 +105,7 @@ class PlugRemoveSlidAction(AbstractAction):
             self.run_visual_servoing(self.align_red_port, save_debug_images=False, run=True)
             # open the gripper a bit to allow some compliance
             self.arm.execute_gripper_command(0.9)
-            inserted = self.move_down_insert()
+            inserted = self.move_down_insert(grasp_height)
             retries += 1
             if retries > max_insert_retries:
                 break
@@ -133,10 +137,8 @@ class PlugRemoveSlidAction(AbstractAction):
             msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
             x_error, y_error = vs_target_fn(save_debug_images)
             if x_error is None:
-                print('none')
                 msg.twist.linear_x = 0.0
             if y_error is None:
-                print('none')
                 msg.twist.linear_y = 0.0
             if x_error is not None:
                 rospy.loginfo('X Error: %.2f' % (x_error))
@@ -241,7 +243,7 @@ class PlugRemoveSlidAction(AbstractAction):
             if mean_color[0] < red_color_threshold_high and mean_color[0] > red_color_threshold_low:
                 filtered_contours.append(contour)
 
-        print("Number of filtered contours: {}".format(len(filtered_contours)))
+        rospy.loginfo_throttle(2, "Number of filtered contours: {}".format(len(filtered_contours)))
 
         # NOTE: it should only be one contour
         if len(filtered_contours) > 1:
@@ -293,7 +295,7 @@ class PlugRemoveSlidAction(AbstractAction):
             # cv2.destroyAllWindows()
 
         else:
-            print("No contour found!")
+            rospy.loginfo_throttle(2, "No contour found!")
             error_x = None
             error_y = None
         
@@ -640,7 +642,7 @@ class PlugRemoveSlidAction(AbstractAction):
         rospy.sleep(0.1)
         return True
 
-    def move_down_insert(self):
+    def move_down_insert(self, grasp_height):
         linear_vel_z = rospy.get_param("~linear_vel_z", 0.005)
         force_z_diff_threshold = 10.0
         force_control_loop_rate = rospy.Rate(rospy.get_param("~force_control_loop_rate", 10.0))
@@ -664,6 +666,10 @@ class PlugRemoveSlidAction(AbstractAction):
                 rospy.loginfo("Force difference threshold reached")
                 stop = True
                 msg.twist.linear_z = 0.0
+            if self.current_height < grasp_height + 0.002:
+                rospy.loginfo("Height difference threshold reached")
+                stop = True
+                msg.twist.linear_z = 0.0
             self.cart_vel_pub.publish(msg)
             if stop:
                 break
@@ -674,17 +680,13 @@ class PlugRemoveSlidAction(AbstractAction):
             inserted_plug = True
             self.arm.execute_gripper_command(0.3) #open gripper
         msg = kortex_driver.msg.TwistCommand()
-        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        msg.twist.linear_z = -linear_vel_z
-        for idx in range(50):
-            if self.current_height > 0.1475:
-                break
-            self.cart_vel_pub.publish(msg)
-            force_control_loop_rate.sleep()
-        msg.twist.linear_z = 0.0
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
         self.cart_vel_pub.publish(msg)
         force_control_loop_rate.sleep()
+
+        current_pose = self.arm.get_current_pose()
+        current_pose.z = 0.1475
+        self.arm.send_cartesian_pose(current_pose)
         return inserted_plug
 
 

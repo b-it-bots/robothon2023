@@ -38,7 +38,9 @@ class ButtonPressAction(AbstractAction):
     def pre_perceive(self) -> bool:
         rospy.loginfo('[%s] pre-preceive' % self.__class__.__name__)
 
-        pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.05)
+        pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.02)
+        if 'red_button' not in self.button_reference_frame:
+            pre_height_above_button -= 0.02
         kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name=self.button_reference_frame,
                                                                       target_frame_name="base_link",
                                                                       offset_linear=[0.0, 0.005, pre_height_above_button],
@@ -46,6 +48,9 @@ class ButtonPressAction(AbstractAction):
 
         self.arm.execute_gripper_command(1.0)
         self.arm.send_cartesian_pose(kinova_pose)
+        if 'red_button' in self.button_reference_frame:
+            kinova_pose.z -= 0.02
+            self.arm.send_cartesian_pose(kinova_pose)
         return True
 
     def act(self) -> bool:
@@ -75,17 +80,16 @@ class ButtonPressAction(AbstractAction):
             if stop:
                 break
             force_control_loop_rate.sleep()
+        rospy.loginfo("Board height %.4f", self.arm.get_current_pose().z)
         msg = kortex_driver.msg.TwistCommand()
-        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        msg.twist.linear_z = -linear_vel_z * 5
-        for idx in range(20):
-            self.cart_vel_pub.publish(msg)
-            force_control_loop_rate.sleep()
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED #publish 0 vel in mixed frame
         msg.twist.linear_z = 0.0
         self.cart_vel_pub.publish(msg)
         force_control_loop_rate.sleep()
-        rospy.sleep(0.1)
+
+        current_pose = self.arm.get_current_pose()
+        current_pose.z += 0.05
+        self.arm.send_cartesian_pose(current_pose)
         return True
 
     def verify(self) -> bool:

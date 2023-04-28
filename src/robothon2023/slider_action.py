@@ -35,19 +35,23 @@ class SliderAction(AbstractAction):
     def act(self) -> bool:
         print ("in act")
 
+        rospy.loginfo(">> Opening gripper <<")
+        if not self.arm.execute_gripper_command(0.55):
+            return False
+
         rospy.loginfo(">> Moving arm to slider <<")
         if not self.move_arm_to_slider():
             return False
 
-        rospy.loginfo(">> Clossing gripper <<")
-        if not self.arm.execute_gripper_command(0.45):
-            return False
-
+        rospy.sleep(1)
         rospy.loginfo(">> Approaching slider with caution <<")
-        if not self.approach_slider_with_caution():
+        success = self.arm.move_down_with_caution(distance=0.05, time=3.0, force_threshold=[4,4,4.5], retract_dist=0.01, tool_z_thresh=0.1095)
+        if not success:
             return False
+        #if not self.approach_slider_with_caution():
+        #    return False
 
-        rospy.loginfo(">> Clossing gripper <<")
+        rospy.loginfo(">> Closing gripper <<")
         if not self.arm.execute_gripper_command(0.75):
             return False
 
@@ -109,7 +113,7 @@ class SliderAction(AbstractAction):
         Move arm to along slider in with velocity vector
         """
 
-        offset = 0.08
+        offset = 0.06
         rospy.loginfo("slider pose below")
         print(self.slider_pose)
         slider_pose = self.rotate_Z_down(self.slider_pose)
@@ -131,6 +135,7 @@ class SliderAction(AbstractAction):
         self.fm.set_force_threshold(force=[4,4,3]) # force in z increases to 4N when it is in contact with the board
 
         # enable force monitoring
+        self.fm.disable_monitoring()
         self.fm.enable_monitoring()
         
         # calculate velocity
@@ -142,11 +147,15 @@ class SliderAction(AbstractAction):
         approach_twist.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
         approach_twist.twist.linear_z = velocity
 
+        height_limit_flat = False
         while not self.fm.force_limit_flag and not rospy.is_shutdown(): 
             # check for force limit flag and stop if it is true
             # check for the z axis of the tooltip and stop if it is less than 0.111(m) (the z axis of the slider) from base frame
 
             if self.fm.force_limit_flag:
+                break
+            if self.arm.get_current_pose().z < 0.1095:
+                height_limit_flag = True
                 break
             self.cartesian_velocity_pub.publish(approach_twist)
             rate_loop.sleep()
@@ -163,7 +172,7 @@ class SliderAction(AbstractAction):
         retract_twist = TwistCommand()
         retract_twist.reference_frame = CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
         retract_twist.twist.linear_z = -velocity
-        if self.fm.force_limit_flag:
+        if self.fm.force_limit_flag or height_limit_flag:
             self.cartesian_velocity_pub.publish(retract_twist)
             rospy.sleep(time)
         
@@ -181,7 +190,7 @@ class SliderAction(AbstractAction):
             distance = 0.0255
         elif direction == "backward":
             dv = -1
-            distance = 0.0255
+            distance = 0.03
         elif direction == "None":
             print("No direction specified")
             return False
