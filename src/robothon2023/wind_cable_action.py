@@ -81,7 +81,7 @@ class WindCableAction(AbstractAction):
 
         kp = self.arm.get_current_pose()
 
-        kp.z = 0.035
+        kp.z = 0.03
 
         if not self.arm.send_cartesian_pose(kp):
             return False
@@ -316,7 +316,8 @@ class WindCableAction(AbstractAction):
 
         self.arm.execute_gripper_command(0.6) # open the gripper
 
-        # move away from holder
+        # move away from and above holder
+        pose_for_tucking_kp.z += 0.04
         success = self.arm.send_cartesian_pose(pose_for_tucking_kp, max_lin_vel=0.01)
 
         return True
