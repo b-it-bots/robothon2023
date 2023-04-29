@@ -55,7 +55,7 @@ class SliderAction(AbstractAction):
         #success = self.move_down_with_caution()
         board_height = rospy.get_param('/board_height', 0.1157)
         current_pose = self.arm.get_current_pose()
-        current_pose.z = board_height
+        current_pose.z = board_height + 0.003
         success = self.arm.send_cartesian_pose(current_pose)
         if not success:
             return False
@@ -263,7 +263,7 @@ class SliderAction(AbstractAction):
         # print("force_y: ", force_y)
         
         success = self.arm.move_down_with_caution(distance = dv*distance, time = 4,
-                                force_threshold=[5,5,3], approach_axis='x',
+                                force_threshold=[10,10,10], approach_axis='x',
                                 retract = False,
                                 retract_dist = 0.01) 
         if not success:

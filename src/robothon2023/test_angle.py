@@ -444,7 +444,7 @@ def open_door(self):
         return False
 
     # open the gripper
-    success = self.arm.execute_gripper_command(0.0)
+    success = self.arm.execute_gripper_command(0.35)
 
     if not success:
         rospy.logerr("Failed to open the gripper")
@@ -508,7 +508,7 @@ def push_door(self):  # push door is not cuurently used
         return False
 
     # open the gripper
-    success = self.arm.execute_gripper_command(0.0)
+    success = self.arm.execute_gripper_command(0.35)
 
     if not success:
         rospy.logerr("Failed to open the gripper")

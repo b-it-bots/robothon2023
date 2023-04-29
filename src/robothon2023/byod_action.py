@@ -34,7 +34,7 @@ class ByodAction(AbstractAction):
     def pre_perceive(self) -> bool:
         print ("in pre perceive")
 
-        success = self.arm.execute_gripper_command(0.0)
+        success = self.arm.execute_gripper_command(0.35)
         if not success:
             return False
         success = self.arm.execute_gripper_command(1.0)

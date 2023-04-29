@@ -634,8 +634,8 @@ class PlugRemoveSlidAction(AbstractAction):
             force_control_loop_rate.sleep()
         msg = kortex_driver.msg.TwistCommand()
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        msg.twist.linear_z = -linear_vel_z
-        for idx in range(10):
+        msg.twist.linear_z = -linear_vel_z 
+        for idx in range(5):
             self.cart_vel_pub.publish(msg)
             force_control_loop_rate.sleep()
         msg.twist.linear_z = 0.0
@@ -680,7 +680,15 @@ class PlugRemoveSlidAction(AbstractAction):
         if self.current_height < plug_insertion_height_threshold: # we've definitely inserted the plug
             rospy.loginfo("Height threshold reached; we have inserted the plug")
             inserted_plug = True
+
+            rotate_plug = True
+            if rotate_plug:
+                current_pose = self.arm.get_current_pose()
+                current_pose.theta_z_deg += 37
+                self.arm.send_cartesian_pose(current_pose)
+                rospy.loginfo("Rotated plug")
             self.arm.execute_gripper_command(0.3) #open gripper
+
         msg = kortex_driver.msg.TwistCommand()
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
         self.cart_vel_pub.publish(msg)
@@ -689,6 +697,20 @@ class PlugRemoveSlidAction(AbstractAction):
         current_pose = self.arm.get_current_pose()
         current_pose.z = 0.1475
         self.arm.send_cartesian_pose(current_pose)
+        if not inserted_plug:
+            # if we fail move backwards a bit to retry
+            msg = kortex_driver.msg.TwistCommand()
+            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            msg.twist.linear_y = -0.005
+            msg.twist.linear_x = -0.005
+            for idx in range(10):
+                self.cart_vel_pub.publish(msg)
+                force_control_loop_rate.sleep()
+        msg = kortex_driver.msg.TwistCommand()
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
+        self.cart_vel_pub.publish(msg)
+        force_control_loop_rate.sleep()
+
         return inserted_plug
 
 

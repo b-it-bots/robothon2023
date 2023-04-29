@@ -28,7 +28,7 @@ class WindCable(object):
         self.fam.clear_faults()
         self.fam.subscribe_to_a_robot_notification()
         self.fam.send_joint_angles(self.joint_angles["perceive_table"])
-        self.fam.execute_gripper_command(0.0) #Open the gripper
+        self.fam.execute_gripper_command(0.35) #Open the gripper
 
     def test(self):
         if self.wind_cable.do():

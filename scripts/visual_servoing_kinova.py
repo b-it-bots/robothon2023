@@ -229,7 +229,7 @@ class WrenchTest(object):
 
     def close_gripper(self):
         rospy.loginfo("Closing gripper")
-        # self.arm.execute_gripper_command(0.0) #Open the gripper 
+        # self.arm.execute_gripper_command(0.35) #Open the gripper 
         #self.arm.example_send_gripper_command(0.5) #half close the gripper 
         self.arm.execute_gripper_command(0.5) #full close the gripper 
         rospy.sleep(0.1)
