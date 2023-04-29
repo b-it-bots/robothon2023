@@ -89,8 +89,12 @@ class PlugRemoveSlidAction(AbstractAction):
     def act(self) -> bool:
         print ("in act")
         #Allign camera
-        self.run_visual_servoing(self.align_black_port, save_debug_images=True, run=True)
+        self.run_visual_servoing(self.align_black_port_2, save_debug_images=True, run=True)
+        current_pose = self.arm.get_current_pose()
+        current_pose.z -= 0.03
+        self.arm.send_cartesian_pose(current_pose)
         self.move_down_velocity_control()
+        grasp_height = self.current_height
         self.arm.execute_gripper_command(1.0) #close gripper
         self.move_up_velocity_control()
         self.move_forward()
@@ -100,8 +104,8 @@ class PlugRemoveSlidAction(AbstractAction):
         while not inserted:
             self.run_visual_servoing(self.align_red_port, save_debug_images=False, run=True)
             # open the gripper a bit to allow some compliance
-            self.arm.execute_gripper_command(0.9)
-            inserted = self.move_down_insert()
+            # self.arm.execute_gripper_command(0.9)
+            inserted = self.move_down_insert(grasp_height)
             retries += 1
             if retries > max_insert_retries:
                 break
@@ -133,10 +137,8 @@ class PlugRemoveSlidAction(AbstractAction):
             msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
             x_error, y_error = vs_target_fn(save_debug_images)
             if x_error is None:
-                print('none')
                 msg.twist.linear_x = 0.0
             if y_error is None:
-                print('none')
                 msg.twist.linear_y = 0.0
             if x_error is not None:
                 rospy.loginfo('X Error: %.2f' % (x_error))
@@ -241,7 +243,7 @@ class PlugRemoveSlidAction(AbstractAction):
             if mean_color[0] < red_color_threshold_high and mean_color[0] > red_color_threshold_low:
                 filtered_contours.append(contour)
 
-        print("Number of filtered contours: {}".format(len(filtered_contours)))
+        rospy.loginfo_throttle(2, "Number of filtered contours: {}".format(len(filtered_contours)))
 
         # NOTE: it should only be one contour
         if len(filtered_contours) > 1:
@@ -293,20 +295,227 @@ class PlugRemoveSlidAction(AbstractAction):
             # cv2.destroyAllWindows()
 
         else:
-            print("No contour found!")
+            rospy.loginfo_throttle(2, "No contour found!")
             error_x = None
             error_y = None
         
         self.img_pub.publish(self.bridge.cv2_to_imgmsg(image, "bgr8"))
         return error_x, error_y
         
+    def align_black_port_2(self, save_debug_images=False):
+        
+        if save_debug_images:
+            self.save_debug_images()
+
+        # parameters
+        red_lower1 = [0, 50, 50]
+        red_upper1 = [4, 255, 255]
+        red_lower2 = [177, 50, 50]
+        red_upper2 = [180, 255, 255]
+        contours_area_threshold_low = 3000
+        contours_area_threshold_high = 9000
+        visualization_flag = False
+        #ROI crop parameters
+        min_x = 280
+        max_x = 1000
+        min_y = 100
+        max_y = 710
+        ## These are targets when tool_pose_z = approx 0.148 m
+        target_x = 356
+        target_y = 330
+
+        # display the image
+        # cv2.imshow("Input image", image)
+        # cv2.waitKey(0)
+        # cv2.destroyAllWindows()
+
+        # crop to ROI
+        image = self.image[min_y:max_y, min_x:max_x]
+        image_original = image.copy()
+        image_original_copy_2 = image.copy()
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("Input ROI image", image)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        # convert to HSV color space
+        image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+
+        # define the lower and upper boundaries of the "red" HSV pixels
+        lower1 = np.array(red_lower1)
+        upper1 = np.array(red_upper1)
+        lower2 = np.array(red_lower2)
+        upper2 = np.array(red_upper2)
+
+        # create the mask
+        mask1 = cv2.inRange(image_hsv, lower1, upper1)
+        mask2 = cv2.inRange(image_hsv, lower2, upper2)
+        mask = cv2.bitwise_or(mask1, mask2)
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("Mask", mask)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            pass
+
+        # Apply morphological transformations to remove noise
+        kernel = np.ones((5, 5), np.uint8)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
+        mask = cv2.morphologyEx(mask, cv2.MORPH_CLOSE, kernel)
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("Morphological Transformed Mask", mask)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        # find contours in the mask
+        contours, hierarchy = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        
+        # no contours found
+        if len(contours) == 0:
+            rospy.loginfo("[plug removal] No contours found!")
+            return None, None
+
+        # filter out small contours
+        filtered_contours = []
+        for contour in contours:
+            # Calculate area and perimeter of the contour
+            area = cv2.contourArea(contour)
+            perimeter = cv2.arcLength(contour, True)
+
+            if area < contours_area_threshold_low or area > contours_area_threshold_high:
+                continue
+
+            if visualization_flag:
+                print("Area: ", area)
+                # draw the contour on the original image
+                cv2.drawContours(image_original_copy_2, [
+                                contour], -1, (0, 255, 0), 2)
+                # show the result
+                cv2.imshow("Filtered Contour", image_original_copy_2)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+
+            filtered_contours.append(contour)
+
+        # no contours found
+        if len(filtered_contours) == 0:
+            rospy.loginfo("[plug removal] No filtered contours found!")
+            return None, None
+
+        # make a mask of the drawn contours
+        mask = np.zeros(image_original.shape[:2], dtype="uint8")
+        cv2.drawContours(mask, filtered_contours, -1, 255, -1)
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("Masked Contours", mask)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        # smooth the edges of the mask
+        mask = cv2.GaussianBlur(mask, (5, 5), 0)
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("Masked Contours blur", mask)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        # find hough circles
+        circles = cv2.HoughCircles(mask, cv2.HOUGH_GRADIENT, 1, 20,
+                                param1=50, param2=10, minRadius=40, maxRadius=60)
+
+        if visualization_flag:
+            # draw the circles
+            if circles is not None:
+                circles = np.uint16(np.around(circles))
+                for (centroid_x, centroid_y, r) in circles[0]:
+                    cv2.circle(image_original_copy_2,
+                            (centroid_x, centroid_y), r, (0, 255, 0), 2)
+
+                    if visualization_flag:
+                        print("Radius: ", r)
+                        # show the result
+                        cv2.imshow("Circles", image_original_copy_2)
+                        cv2.waitKey(0)
+                        cv2.destroyAllWindows()
+            else:
+                rospy.loginfo("[plug removal] red circle not found !")
+                return None, None
+
+        # get the biggest circle from the list
+        if circles is not None:
+            circles = np.uint16(np.around(circles))
+            circles = sorted(circles[0], key=lambda x: x[2], reverse=True)
+            (centroid_x, centroid_y, r) = circles[0]
+            cv2.circle(image_original,
+                    (centroid_x, centroid_y), r, (0, 255, 0), 2)
+
+            if visualization_flag:
+                # show the result
+                cv2.imshow("Final Circles", image_original)
+                cv2.waitKey(0)
+                cv2.destroyAllWindows()
+        else:
+            rospy.loginfo("[plug removal] red circle not found !")
+            return None, None
+
+        # display the center of the circle
+        cv2.circle(image_original, (centroid_x, centroid_y), 5, (0, 0, 255), -1)
+
+        # display the image with target points
+        cv2.circle(image_original, (target_x, target_y), 5, (255, 255, 0), -1)
+
+        # draw a horizontal line from the target point
+        cv2.line(image_original, (0, target_y),
+                (image.shape[1], target_y), (0, 0, 255), 2)
+        # draw a vertical line from the target point
+        cv2.line(image_original, (target_x, 0),
+                (target_x, image.shape[0]), (0, 0, 255), 2)
+
+        # calculate the error
+        error_x = target_x - centroid_x
+        error_y = target_y - centroid_y
+
+        # print the error in the image
+        cv2.putText(image_original, "Error: {}, {}".format(error_x, error_y),
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 0), 2)
+
+        # draw a horizontal line from the centroid to the target point (x-axis only)
+        horizontal_line = [(centroid_x, centroid_y), (target_x, centroid_y)]
+        cv2.line(image_original, horizontal_line[0],
+                horizontal_line[1], (0, 255, 0), 2)
+
+        # draw a vertical line from the end of the horizontal line to the target point (y-axis only)
+        vertical_line = [(target_x, centroid_y), (target_x, target_y)]
+        cv2.line(image_original, vertical_line[0],
+                vertical_line[1], (0, 255, 0), 2)
+
+        if visualization_flag:
+            # show the result
+            cv2.imshow("FINAL IMAGE", image_original)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+
+        self.img_pub.publish(self.bridge.cv2_to_imgmsg(image_original, "bgr8"))
+
+        return error_x, error_y
+
     def align_red_port(self, save_debug_images=False):
         min_x = 200
         max_x = 1000
         min_y = 100
         max_y = 520
         ## These are targets when tool_pose_z = approx 0.148 m
-        target_x = 570
+        ## if robot ends up too far back, increase target_y
+        ## if robot ends up too far right, increase target_x
+        target_x = 566
         target_y = 318
         color_img = self.image[min_y:max_y, min_x:max_x]
         img = cv2.cvtColor(color_img, cv2.COLOR_BGR2GRAY)
@@ -425,8 +634,8 @@ class PlugRemoveSlidAction(AbstractAction):
             force_control_loop_rate.sleep()
         msg = kortex_driver.msg.TwistCommand()
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        msg.twist.linear_z = -linear_vel_z
-        for idx in range(10):
+        msg.twist.linear_z = -linear_vel_z 
+        for idx in range(5):
             self.cart_vel_pub.publish(msg)
             force_control_loop_rate.sleep()
         msg.twist.linear_z = 0.0
@@ -435,7 +644,7 @@ class PlugRemoveSlidAction(AbstractAction):
         rospy.sleep(0.1)
         return True
 
-    def move_down_insert(self):
+    def move_down_insert(self, grasp_height):
         linear_vel_z = rospy.get_param("~linear_vel_z", 0.005)
         force_z_diff_threshold = 10.0
         force_control_loop_rate = rospy.Rate(rospy.get_param("~force_control_loop_rate", 10.0))
@@ -459,6 +668,10 @@ class PlugRemoveSlidAction(AbstractAction):
                 rospy.loginfo("Force difference threshold reached")
                 stop = True
                 msg.twist.linear_z = 0.0
+            if self.current_height < grasp_height + 0.002:
+                rospy.loginfo("Height difference threshold reached")
+                stop = True
+                msg.twist.linear_z = 0.0
             self.cart_vel_pub.publish(msg)
             if stop:
                 break
@@ -467,19 +680,37 @@ class PlugRemoveSlidAction(AbstractAction):
         if self.current_height < plug_insertion_height_threshold: # we've definitely inserted the plug
             rospy.loginfo("Height threshold reached; we have inserted the plug")
             inserted_plug = True
+
+            rotate_plug = True
+            if rotate_plug:
+                current_pose = self.arm.get_current_pose()
+                current_pose.theta_z_deg += 37
+                self.arm.send_cartesian_pose(current_pose)
+                rospy.loginfo("Rotated plug")
             self.arm.execute_gripper_command(0.3) #open gripper
+
         msg = kortex_driver.msg.TwistCommand()
-        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        msg.twist.linear_z = -linear_vel_z
-        for idx in range(50):
-            if self.current_height > 0.1475:
-                break
-            self.cart_vel_pub.publish(msg)
-            force_control_loop_rate.sleep()
-        msg.twist.linear_z = 0.0
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
         self.cart_vel_pub.publish(msg)
         force_control_loop_rate.sleep()
+
+        current_pose = self.arm.get_current_pose()
+        current_pose.z = 0.1475
+        self.arm.send_cartesian_pose(current_pose)
+        if not inserted_plug:
+            # if we fail move backwards a bit to retry
+            msg = kortex_driver.msg.TwistCommand()
+            msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
+            msg.twist.linear_y = -0.005
+            msg.twist.linear_x = -0.005
+            for idx in range(10):
+                self.cart_vel_pub.publish(msg)
+                force_control_loop_rate.sleep()
+        msg = kortex_driver.msg.TwistCommand()
+        msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_MIXED
+        self.cart_vel_pub.publish(msg)
+        force_control_loop_rate.sleep()
+
         return inserted_plug
 
 
@@ -522,7 +753,7 @@ class PlugRemoveSlidAction(AbstractAction):
         rospy.loginfo("Moving forward")
         msg = kortex_driver.msg.TwistCommand()
         msg.reference_frame = kortex_driver.msg.CartesianReferenceFrame.CARTESIAN_REFERENCE_FRAME_TOOL
-        for idx in range(25):
+        for idx in range(23):
             msg.twist.linear_y = 0.01
             self.cart_vel_pub.publish(msg)
             self.loop_rate.sleep()
@@ -530,6 +761,7 @@ class PlugRemoveSlidAction(AbstractAction):
         self.cart_vel_pub.publish(msg)
         self.loop_rate.sleep()
         self.cart_vel_pub.publish(msg)
+
 
     def save_debug_images(self):
         rospy.loginfo_once("Saving debug images")

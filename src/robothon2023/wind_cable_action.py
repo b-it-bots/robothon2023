@@ -32,65 +32,63 @@ class WindCableAction(AbstractAction):
         self.bridge = CvBridge()
         self.cart_vel_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', kortex_driver.msg.TwistCommand, queue_size=1)
         self.model = yolov5.load(
-            '/home/b-it-bots/temp/robothon/weights/best_nano_2.pt')
+            '/home/b-it-bots/robothon_ros_workspace/src/robothon2023/models/probe_holder_horizontal/probe_holder_horizontal_nano_ver2.pt')
         self.model_params()
-        self.save_debug_image_dir = '/home/b-it-bots/temp/robothon'
+        self.save_debug_image_dir = '/home/b-it-bots/temp/robothon/windCable'
 
     def pre_perceive(self) -> bool:
         print ("in pre perceive")        
 
         # pre-perceive pose
 
-        self.arm.execute_gripper_command(0.0)
-
-        '''
-        # get the pre-perceive pose from tf
-        msg = PoseStamped()
-        msg.header.frame_id = "wind_cable_link"
-        msg.header.stamp = rospy.Time(0)
-        wind_cable_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True, offset=[0, 0, math.pi/2])
-
-        # convert to kinova pose
-        kp = get_kinovapose_from_pose_stamped(wind_cable_pose)
-
-        kp.z += 0.05
-
-        # send to arm
-        rospy.loginfo("Sending pre-perceive pose to arm")
-        if not self.arm.send_cartesian_pose(kp):
-            rospy.logerr("Failed to send pre-perceive pose to arm")
-            return False
+        self.arm.execute_gripper_command(0.35)
         
-        kp.z = 0.0316
+        # get the pre-perceive pose from tf
+        # msg = PoseStamped()
+        # msg.header.frame_id = "wind_cable_link"
+        # msg.header.stamp = rospy.Time(0)
+        # wind_cable_pose = self.transform_utils.transformed_pose_with_retries(msg, "base_link", execute_arm=True, offset=[0, 0, math.pi/2])
 
-        # send to arm
-        rospy.loginfo("Sending pre-perceive pose to arm")
-        if not self.arm.send_cartesian_pose(kp):
-            rospy.logerr("Failed to send pre-perceive pose to arm")
-            return False
-        '''
+        # # convert to kinova pose
+        # kp = get_kinovapose_from_pose_stamped(wind_cable_pose)
+
+        # kp.z += 0.05
+
+        # # send to arm
+        # rospy.loginfo("Sending pre-perceive pose to arm")
+        # if not self.arm.send_cartesian_pose(kp):
+        #     rospy.logerr("Failed to send pre-perceive pose to arm")
+        #     return False
         
         return True
 
     def act(self) -> bool:
         
         # start visual servoing
-        rospy.loginfo("Starting visual servoing")
-        # TODO: fix the visual servoing
-        success = self.run_visual_servoing(self.detect_wind_cable, True, error_thresholds = [40, 50])
+        # rospy.loginfo("Starting visual servoing")
+        # # TODO: fix the visual servoing
+        # success = self.run_visual_servoing(self.detect_wind_cable, True, error_thresholds = [40, 50])
 
-        if not success:
-            return False
+        # kp = self.arm.get_current_pose()
+
+        # kp.z = 0.03
+
+        # if not self.arm.send_cartesian_pose(kp):
+        #     return False
+        
+        # self.arm.execute_gripper_command(1.0)
+
+        # if not success:
+        #     return False
         
         # wind cable
+        rospy.loginfo('[wind action] starting winding')
         success = self.wind_cable()
         
         if not success:
             return False
 
         pose_for_tucking_kp = self.find_and_save_tucking_pose()
-
-
         
         # pick probe from holder
         success = self.pick_probe_from_holder()
@@ -117,106 +115,96 @@ class WindCableAction(AbstractAction):
         except CvBridgeError as e:
             print(e)
         self.image = image
+
+    def get_pose_in_board(self, pose: list):
+        msg = PoseStamped()
+        msg.header.frame_id = "board_link"
+        msg.pose.position.x = pose[0]
+        msg.pose.position.y = pose[1]
+        msg.pose.position.z = pose[2]
+        msg.pose.orientation.x = pose[3]
+        msg.pose.orientation.y = pose[4]
+        msg.pose.orientation.z = pose[5]
+        msg.pose.orientation.w = pose[6]
+
+        # convert to base_link frame
+        msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+
+        # convert to kinova_pose
+        kp = get_kinovapose_from_pose_stamped(msg_in_base)
+
+        return kp
     
     def wind_cable(self) -> bool:
 
-        pose_num = 1
-        success = False
-        for i in range(1, 5):
-            gripper_angle = rospy.get_param("~wind_poses/traj" + str(i)+"/gripper")
-            
-            poses = rospy.get_param("~wind_poses/traj" + str(i)+"/poses")
-            
-            # from poses dict, get number of poses
-            num_poses = len(poses)
+        # go and pick at board
+        self.arm.execute_gripper_command(0.6)
 
-            waypoints = []
-            
-            # for each pose, get the pose and convert to kinova pose
-            for j in range(pose_num, num_poses+pose_num):
-                pose = poses["pose" + str(j)]
+        p1 = rospy.get_param("~wind_poses/p1")
+        p2 = rospy.get_param("~wind_poses/p2")
 
-                msg = PoseStamped()
-                msg.header.frame_id = "board_link"
-                msg.pose.position.x = pose["position"]["x"]
-                msg.pose.position.y = pose["position"]["y"]
-                msg.pose.position.z = pose["position"]["z"]
-                msg.pose.orientation.x = pose["orientation"]["x"]
-                msg.pose.orientation.y = pose["orientation"]["y"]
-                msg.pose.orientation.z = pose["orientation"]["z"]
-                msg.pose.orientation.w = pose["orientation"]["w"]
+        traj1 = []
+        traj1.append(self.get_pose_in_board(p1))
+        traj1.append(self.get_pose_in_board(p2))
 
-                # convert to base_link frame
-                msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+        if not self.arm.traverse_waypoints(traj1):
+            return False
 
-                # convert to kinova_pose
-                kp = get_kinovapose_from_pose_stamped(msg_in_base)
+        self.arm.execute_gripper_command(0.9)
 
-                waypoints.append(kp)
+        # drag and drop
+        p3 = rospy.get_param("~wind_poses/p3")
 
-            pose_num += num_poses
+        p3_kp = self.get_pose_in_board(p3)
 
-            print('gripper closed')
-            self.arm.execute_gripper_command(gripper_angle)
-            success = self.arm.traverse_waypoints(waypoints)
+        if not self.arm.send_cartesian_pose(p3_kp):
+            return False
 
-        print('first round done')
+        self.arm.execute_gripper_command(0.35)
 
-        # round 2
-        # TODO: check the second round of wind cable if its correct
-        pose_num = 1
-        for i in range(5, 9):
-            gripper_angle = rospy.get_param("~wind_poses/traj" + str(i)+"/gripper")
-            
-            poses = rospy.get_param("~wind_poses/traj" + str(i)+"/poses")
-            
-            # from poses dict, get number of poses
-            num_poses = len(poses)
+        # pick again
+        p4 = rospy.get_param("~wind_poses/p4")
 
-            waypoints = []
-            
-            # for each pose, get the pose and convert to kinova pose
-            for j in range(pose_num, num_poses+pose_num):
+        p4_kp = self.get_pose_in_board(p4)
 
-                if j == 9:
-                    continue
+        if not self.arm.send_cartesian_pose(p4_kp):
+            return False
 
-                pose = poses["pose" + str(j)+ "0"]
+        self.arm.execute_gripper_command(0.9)
 
-                msg = PoseStamped()
-                msg.header.frame_id = "board_link"
-                msg.pose.position.x = pose["position"]["x"]
-                msg.pose.position.y = pose["position"]["y"]
-                msg.pose.position.z = pose["position"]["z"]
-                msg.pose.orientation.x = pose["orientation"]["x"]
-                msg.pose.orientation.y = pose["orientation"]["y"]
-                msg.pose.orientation.z = pose["orientation"]["z"]
-                msg.pose.orientation.w = pose["orientation"]["w"]
+        # wind
+        waypoints = []
+        for i in range(5, 33):
+            pose = rospy.get_param("~wind_poses/p" + str(i))
 
-                # convert to base_link frame
-                msg_in_base = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
+            kp = self.get_pose_in_board(pose)
 
-                # convert to kinova_pose
-                kp = get_kinovapose_from_pose_stamped(msg_in_base)
+            waypoints.append(kp)
+            # if not self.arm.send_cartesian_pose(kp):
+            #     return False
 
-                waypoints.append(kp)
+        if not self.arm.traverse_waypoints(waypoints):
+            return False
 
-            pose_num += num_poses
-
-            print('gripper closed')
-            self.arm.execute_gripper_command(gripper_angle)
-            success = self.arm.traverse_waypoints(waypoints)
-
-        return success
+        self.arm.execute_gripper_command(0.85)
+        self.arm.execute_gripper_command(0.7)
+        self.arm.execute_gripper_command(0.35)
+        current_pose = self.arm.get_current_pose()
+        current_pose.z += 0.1
+        self.arm.send_cartesian_pose(current_pose)
+        return True
     
     def pick_probe_from_holder(self):
         
         # # go to the probe pick perceive position above the holder
-        self.arm.execute_gripper_command(0.0)
+        self.arm.execute_gripper_command(0.35)
 
-        perceive_board_pose = rospy.get_param("~perceive_board_pose")
-        perceive_board_pose = get_kinovapose_from_list(perceive_board_pose)
-        success = self.arm.send_cartesian_pose(perceive_board_pose)
+        current_pose = self.arm.get_current_pose()
+        current_pose.z += 0.05
+        self.arm.send_cartesian_pose(current_pose)
+
+        perceive_board_pose = rospy.get_param("~joint_angles/perceive_board_pose")
+        success = self.arm.send_joint_angles(perceive_board_pose)
 
         safe_pose_after_probe_placement = rospy.get_param("~probe_action_poses/safe_pose_after_probe_placement")
         safe_pose_after_probe_placement = get_kinovapose_from_list(safe_pose_after_probe_placement)
@@ -269,7 +257,7 @@ class WindCableAction(AbstractAction):
         rospy.loginfo('[probe_action] reached probe initial position')
 
         rospy.loginfo("[probe_action] moving away from holder")
-        success = self.arm.move_with_velocity(0.06, 1.5, 'y')
+        success = self.arm.move_with_velocity(0.04, 2.0, 'y')
         if not success:
             rospy.logerr("[probe_action] Failed to move away from holder")
             return False
@@ -280,7 +268,7 @@ class WindCableAction(AbstractAction):
         rospy.loginfo("[probe_action] moving down the probe")
         # success = self.arm.move_down_with_caution(force_threshold=[4,4,1.75], velocity=0.005, tool_z_thresh=0.10, retract_dist=0.008)
 
-        pose_for_tucking_kp.z = 0.1173
+        pose_for_tucking_kp.z = 0.1173 + 0.00225
         pose_for_tucking_kp.x = current_pose.x
         pose_for_tucking_kp.y = current_pose.y
 
@@ -294,8 +282,9 @@ class WindCableAction(AbstractAction):
         
         # move the probe back in x direction for 4cm
         #success = self.arm.move_with_velocity(-0.025, 3, 'y')
-
-        self.arm.move_down_with_caution(approach_axis='y', distance=0.05, force_threshold=[5,5, 10])
+        
+        #This moves the arm forward with some force for 1.5 cm .. Its 1.5 cm to just touch theprobe not full inserting
+        self.arm.move_down_with_caution(approach_axis='y', distance=-0.015, force_threshold=[5,5, 10])
 
         if not success:
             rospy.logerr("Failed to move back the probe")
@@ -303,8 +292,11 @@ class WindCableAction(AbstractAction):
 
         self.arm.execute_gripper_command(0.6) # open the gripper
 
-        # move the arm up in z axis
-        #success = self.arm.move_with_velocity(0.03, 3, 'z')
+        current_pose = self.arm.get_current_pose()
+        current_pose.z += 0.04
+        # move away from and above holder
+        success = self.arm.send_cartesian_pose(current_pose)
+
         return True
 
     def run_visual_servoing(self, vs_target_fn, run=True, error_thresholds=[5, 10]):
@@ -363,18 +355,22 @@ class WindCableAction(AbstractAction):
         # parameters
         circularity_threshold_min = 0.0
         circularity_threshold_max = 0.5
-        contours_area_threshold_min = 5000
-        contours_area_threshold_max = 10000
+        contours_area_threshold_min = 3000
+        contours_area_threshold_max = 15000
+
+        # image center coordinates
+        image_center_x = self.image.shape[1] // 2
+        image_center_y = self.image.shape[0] // 2
 
         # draw a rectangle on the image from the center of the image
-        x_axis_right = 300
+        x_axis_right = 500
         x_axis_left = 300
         y_axis_top = 10
-        y_axis_bottom = self.image.shape[0] # y_axis_bottom is height of the image
+        y_axis_bottom = 200
 
         # crop the ROI from the image with the rectangle
-        roi = self.image[self.image.shape[0] // 2 - y_axis_top:self.image.shape[0] // 2 + y_axis_bottom,
-                    self.image.shape[1] // 2 - x_axis_left:self.image.shape[1] // 2 + x_axis_right]
+        roi = self.image[image_center_y - y_axis_top:image_center_y +
+                            y_axis_bottom, image_center_x - x_axis_left:image_center_x + x_axis_right]
 
         cv2.rectangle(roi, (0, 0), (roi.shape[1], roi.shape[0]), (255, 255, 255), 20)
 
@@ -402,9 +398,6 @@ class WindCableAction(AbstractAction):
         # draw the contours on the image
         cv2.drawContours(roi_copy, contours, -1, (0, 255, 0), 2)
 
-        # cv2.imshow("Contours", roi_copy)
-        # cv2.waitKey(0)
-        # cv2.destroyAllWindows()
 
         # filter out black contours
         filtered_contours = []
@@ -415,6 +408,7 @@ class WindCableAction(AbstractAction):
             perimeter = cv2.arcLength(contour, True)
             # filter out small contours
             if area < contours_area_threshold_min or area > contours_area_threshold_max:
+                rospy.logwarn("Removing contour with area: %.2f, min:%.2f, max: %.2f" % (area, contours_area_threshold_min, contours_area_threshold_max))
                 continue
 
             # print("Area: {}".format(area))
@@ -485,6 +479,10 @@ class WindCableAction(AbstractAction):
             return (None, None)
     
     def find_and_save_tucking_pose(self):
+
+        #current_pose = self.arm.get_current_pose()
+        #current_pose.z = 0.11
+        #self.arm.send_cartesian_pose(current_pose)
         probe_initial_pose_kp = self.transform_utils.transform_pose_frame_name(reference_frame_name="probe_initial_link",
                                                                       target_frame_name="base_link",
                                                                       offset_linear=[0.0, 0.00, 0.08],
@@ -505,8 +503,6 @@ class WindCableAction(AbstractAction):
             pose_for_tucking.theta_z_deg -= 180.0
         else:
             pose_for_tucking.theta_z_deg += 180.0
-        print('probe initial pose kp', probe_initial_pose_kp)
-        print('pose for tucking', pose_for_tucking)
         return pose_for_tucking
 
     def model_params(self):
@@ -550,7 +546,7 @@ class WindCableAction(AbstractAction):
 
                     #TODO: Check if the probe can be picked near the tip 
                     # find the error in x direction
-                    error_x = center[0] - center_box[0] + 20.0 #magic number for aligning the tip of probe to the center
+                    error_x = center[0] - center_box[0] + 27.0 #magic number for aligning the tip of probe to the center
 
                     # print the error on the image on the top left corner of the image
                     cv2.putText(image_copy, "Error: " + str(error_x.numpy()), (10, 30),
@@ -576,6 +572,10 @@ class WindCableAction(AbstractAction):
        
         # get the current date and time
         now = datetime.datetime.now()
+
+        # check if the directory exists
+        if not os.path.exists(self.save_debug_image_dir):
+            os.makedirs(self.save_debug_image_dir)
 
         if self.image is not None:
             cv2.imwrite(os.path.join(

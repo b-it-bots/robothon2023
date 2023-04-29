@@ -208,9 +208,7 @@ class RobothonTask(object):
         fixed_transforms_window.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         # wind cable poses
-        trajs = [self.wind_cable_poses[trajectory]['poses'] for trajectory in self.wind_cable_poses]
-        
-        wind_cable_poses = [(pose, traj[pose]) for traj in trajs for pose in traj.keys()]
+        wind_cable_poses = [(pose, self.wind_cable_poses[pose]) for pose in self.wind_cable_poses]
         
         wind_cable_poses_list = ItemList()
         wind_cable_poses_list.add_items(wind_cable_poses)
@@ -321,13 +319,13 @@ class RobothonTask(object):
         
         msg = PoseStamped()
         msg.header.frame_id = "board_link"
-        msg.pose.position.x = item.value['position']['x']
-        msg.pose.position.y = item.value['position']['y']
-        msg.pose.position.z = item.value['position']['z']
-        msg.pose.orientation.x = item.value['orientation']['x']
-        msg.pose.orientation.y = item.value['orientation']['y']
-        msg.pose.orientation.z = item.value['orientation']['z']
-        msg.pose.orientation.w = item.value['orientation']['w']
+        msg.pose.position.x = item.value[0]
+        msg.pose.position.y = item.value[1]
+        msg.pose.position.z = item.value[2]
+        msg.pose.orientation.x = item.value[3]
+        msg.pose.orientation.y = item.value[4]
+        msg.pose.orientation.z = item.value[5]
+        msg.pose.orientation.w = item.value[6]
 
         # convert to base_link
         msg = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
@@ -345,12 +343,12 @@ class RobothonTask(object):
         self.heading = tk.Label(frame, text="Gripper Command", font=("Helvetica", 14))
         self.heading.grid(row=0, column=0, padx=10, pady=10, sticky="w") 
 
-        self.open_button = tk.Button(frame, text="Open", command=lambda: self.gripper_cb(0.0))
+        self.open_button = tk.Button(frame, text="Open", command=lambda: self.gripper_cb(0.35))
 
         self.close_button = tk.Button(frame, text="Close", command=lambda: self.gripper_cb(1.0))
 
         self.gripper_value = tk.DoubleVar()
-        self.gripper_value.set(0.0)
+        self.gripper_value.set(0.35)
 
         self.gripper_value_entry = tk.Entry(frame, textvariable=self.gripper_value)
 
@@ -478,6 +476,8 @@ class RobothonTask(object):
         msg.pose.orientation.y = values[4]
         msg.pose.orientation.z = values[5]
         msg.pose.orientation.w = values[6]
+
+        msg = self.transform_utils.transformed_pose_with_retries(msg, "base_link")
 
         # send the robot to the pose
         self.arm.clear_faults()

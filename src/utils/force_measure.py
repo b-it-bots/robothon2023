@@ -46,7 +46,7 @@ class ForceMeasurmement:
 
         self._force['t_z'].append(msg.base.tool_external_wrench_torque_z)
 
-        if len(self._force['x']) > 25:
+        if len(self._force['x']) > 15:
             self._force['x'].pop(0)
             self._force['y'].pop(0)
             self._force['z'].pop(0)
@@ -94,15 +94,15 @@ class ForceMeasurmement:
 
         force_accumulated = [0,0,0,0]
 
-        force_accumulated[0] = abs(np.mean(self._force['x']) - self._force['x'][-1])
-        force_accumulated[1] = abs(np.mean(self._force['y']) - self._force['y'][-1])
-        force_accumulated[2] = abs(np.mean(self._force['z']) - self._force['z'][-1])
-        force_accumulated[3] = abs(np.mean(self._force['t_z']) - self._force['t_z'][-1])
+        force_accumulated[0] = abs(np.mean(self._force['x'][:3]) - np.mean(self._force['x'][-3:]))
+        force_accumulated[1] = abs(np.mean(self._force['y'][:3]) - np.mean(self._force['y'][-3:]))
+        force_accumulated[2] = abs(np.mean(self._force['z'][:3]) - np.mean(self._force['z'][-3:]))
+        force_accumulated[3] = abs(np.mean(self._force['t_z'][:3]) - np.mean(self._force['t_z'][-3:]))
 
-        print("\n")
-        print("-"*20)
-        print("Force accumulated in x --> : ", force_accumulated[0])
-        print("Force accumulated in y --> : ", force_accumulated[1])
+        #print("\n")
+        #print("-"*20)
+        #print("Force accumulated in x --> : ", force_accumulated[0])
+        #print("Force accumulated in y --> : ", force_accumulated[1])
 
         yellow = "\033[93m"
 

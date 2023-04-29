@@ -587,7 +587,7 @@ class FullArmMovement:
             # Example of gripper command
             # Let's fully open the gripper
             if self.is_gripper_present:
-                success &= self.execute_gripper_command(0.0)
+                success &= self.execute_gripper_command(0.35)
             else:
                 rospy.logwarn("No gripper is present on the arm.")  
             #*******************************************************************************

@@ -8,6 +8,7 @@ import std_msgs.msg
 import geometry_msgs.msg
 import tf
 from kortex_driver.msg import BaseCyclic_Feedback
+import numpy as np
 
 import rospy
 from robothon2023.full_arm_movement import FullArmMovement
@@ -25,7 +26,7 @@ from robothon2023.wind_cable_action import WindCableAction
 class TaskSM(object):
     def __init__(self):
         self.board_detector_event = None
-        self.init_board_pose = None
+        self.init_board_pose = []
         self.board_detector_event_out = rospy.Subscriber('~board_detector_event_out', std_msgs.msg.String, self.board_detector_event_cb)
         self.board_detector_event_in = rospy.Publisher('~board_detector_event_in', std_msgs.msg.String, queue_size=1)
         self.poi_event_in = rospy.Publisher('~poi_event_in', std_msgs.msg.String, queue_size=1)
@@ -45,7 +46,7 @@ class TaskSM(object):
 
 
     def board_pose_cb(self, msg):
-        self.init_board_pose = msg
+        self.init_board_pose.append(msg)
 
     def board_detector_event_cb(self, msg):
         self.board_detector_event = msg.data
@@ -90,18 +91,27 @@ class TaskSM(object):
         return success
 
     def orient_arm_to_board(self):
-        euler = tf.transformations.euler_from_quaternion(
-            [self.init_board_pose.pose.orientation.x,
-            self.init_board_pose.pose.orientation.y,
-            self.init_board_pose.pose.orientation.z,
-            self.init_board_pose.pose.orientation.w]
-        )
-        quat = tf.transformations.quaternion_from_euler(math.pi, 0.0, euler[2])
+        yaws = []
+        xs = []
+        ys  = []
+        for pose in self.init_board_pose:
+            euler = tf.transformations.euler_from_quaternion(
+                [pose.pose.orientation.x,
+                pose.pose.orientation.y,
+                pose.pose.orientation.z,
+                pose.pose.orientation.w]
+            )
+            yaws.append(euler[2])
+            xs.append(pose.pose.position.x)
+            ys.append(pose.pose.position.y)
+
+        median_yaw = np.median(yaws)
+        quat = tf.transformations.quaternion_from_euler(math.pi, 0.0, median_yaw)
 
         feedback = rospy.wait_for_message("/my_gen3/base_feedback", BaseCyclic_Feedback)
-        updated_pose = self.init_board_pose
-        updated_pose.pose.position.x = self.init_board_pose.pose.position.x
-        updated_pose.pose.position.y = self.init_board_pose.pose.position.y
+        updated_pose = self.init_board_pose[0]
+        updated_pose.pose.position.x = np.median(xs)
+        updated_pose.pose.position.y = np.median(ys)
         updated_pose.pose.position.z = feedback.base.tool_pose_z - 0.05
         updated_pose.pose.orientation = geometry_msgs.msg.Quaternion(*quat)
         kinova_pose = get_kinovapose_from_pose_stamped(updated_pose)
@@ -133,7 +143,7 @@ class TaskSM(object):
         timeout = rospy.Duration.from_sec(20.0)
         start_time = rospy.Time.now()
         while not rospy.is_shutdown():
-            if self.init_board_pose is not None:
+            if len(self.init_board_pose) > 5:
                 self.board_detector_event_in.publish('e_stop')
                 return True
             if (rospy.Time.now() - start_time) > timeout:

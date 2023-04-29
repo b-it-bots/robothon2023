@@ -226,7 +226,7 @@ class PickAndPlace(object):
         # self.fam.test_send_joint_angles(self.joint_angles["vertical_pose"])
         print (self.joint_angles['perceive_table'])
         self.fam.send_joint_angles(self.joint_angles["perceive_table"])
-        self.fam.execute_gripper_command(0.0) #Open the gripper 
+        self.fam.execute_gripper_command(0.35) #Open the gripper 
         #self.fam.example_send_gripper_command(0.5) #half close the gripper 
         self.fam.execute_gripper_command(0.9) #full close the gripper 
         rospy.sleep(2.0)
