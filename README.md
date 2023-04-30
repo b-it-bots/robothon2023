@@ -112,9 +112,9 @@ The origin of the board is said to be at the center of the blue button, and is b
 The images below illustrate the blue and red filters, and the final result of the detected buttons.
 
 <p float="left">
-  <img src="images/button/blue_mask.jpg" width="250" />
-  <img src="images/button/red_mask.jpg" width="250" />
-  <img src="images/button/result.jpg" width="250" />
+  <img src="docs/images/button/blue_mask.jpg" width="250" />
+  <img src="docs/images/button/red_mask.jpg" width="250" />
+  <img src="docs/images/button/result.jpg" width="250" />
 </p>
 
 #### Pressing the button
@@ -147,10 +147,9 @@ The images below show the original image, thresholded image, and the detected ve
 The vertical pair of circles are used to align along the horizontal axis, and the horizontal pair for alignment along the vertical axis.
 
 <p float="left">
-  <img src="images/plug_insert/orig.jpg" width="250" />
-  <img src="images/plug_insert/mask.jpg" width="250" />
-  <img src="images/plug_insert/result.jpg" width="250" />
-  <img src="images/plug_insert/red_port_vs.gif" width="250" />
+  <img src="docs/images/plug_insert/orig.jpg" width="250" />
+  <img src="docs/images/plug_insert/mask.jpg" width="250" />
+  <img src="docs/images/plug_insert/result.jpg" width="250" />
 </p>
 
 After alignment, the plug is inserted into the test port, by moving downwards with [force monitoring](#force-monitoring). This action is retried multiple times (with realignment) if it is detected that the plug has not been inserted (via a height and force threshold).
@@ -166,9 +165,9 @@ The arm is moved above the door knob, based on the fixed transformation from the
 The images below illustrate the result of the Canny edge detection, contour detection and the final detected door knob.
 
 <p float="left">
-  <img src="images/door/canny.jpg" width="250" />
-  <img src="images/door/contours.jpg" width="250" />
-  <img src="images/door/result.jpg" width="250" />
+  <img src="docs/images/door/canny.jpg" width="250" />
+  <img src="docs/images/door/contours.jpg" width="250" />
+  <img src="docs/images/door/result.jpg" width="250" />
 </p>
 The robot arm is aligned with the door knob using [visual servoing](#visual-servoing).
 
@@ -181,7 +180,7 @@ The probe is re-grasped such that it is parallel to the gripper fingers and move
 Visual servoing is performed at this location, using as a target the orange square below the point to be probed.
 
 <p float="left">
-  <img src="images/probing/probe_circuit_target.jpg" width="250" />
+  <img src="docs/images/probing/probe_circuit_target.jpg" width="250" />
 </p>
 
 Once aligned, the probe is moved downwards at a slow velocity, and a height and force threshold is used to determine if the circuit was successfully probed. In case of a failure, the probed is moved back up, and probing is retried after realignment.
