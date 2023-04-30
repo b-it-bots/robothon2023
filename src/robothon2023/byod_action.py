@@ -2,15 +2,22 @@
 import tf
 import rospy
 import numpy as np
-import math 
+import math
+import cv2
+import os
+import datetime
 from kortex_driver.msg import TwistCommand, CartesianReferenceFrame
 
 from robothon2023.abstract_action import AbstractAction
 from robothon2023.full_arm_movement import FullArmMovement
-from geometry_msgs.msg import PoseStamped, Quaternion, Twist, Vector3
+from geometry_msgs.msg import PoseStamped, Quaternion, Twist
 from robothon2023.transform_utils import TransformUtils
 from utils.kinova_pose import KinovaPose, get_kinovapose_from_pose_stamped, get_kinovapose_from_list
 from utils.force_measure import ForceMeasurmement
+from sensor_msgs.msg import Image
+from std_msgs.msg import String
+from cv_bridge import CvBridge, CvBridgeError
+import pytesseract
 
 class ByodAction(AbstractAction): 
 
@@ -22,6 +29,7 @@ class ByodAction(AbstractAction):
         self.fm = ForceMeasurmement()
         self.tf_utils = transform_utils
         self.listener = tf.TransformListener()
+        self.bridge = CvBridge()
 
         self.multimeter_poses = rospy.get_param("~multimeter_poses")
         self.joint_angles = rospy.get_param("~joint_angles")
@@ -29,6 +37,11 @@ class ByodAction(AbstractAction):
         self.power_button_poses = rospy.get_param("~power_button_poses")
 
         self.cartesian_velocity_pub = rospy.Publisher('/my_gen3/in/cartesian_velocity', TwistCommand, queue_size=1)
+        self.img_sub = rospy.Subscriber('/camera/color/image_raw', Image, self.image_cb)
+        # same topic as other debug images
+        self.img_pub = rospy.Publisher('/visual_servoing_debug_img', Image, queue_size=10)
+        self.multimeter_value_pub = rospy.Publisher('/multimeter_value', String, queue_size=10)
+        self.save_debug_images_dir = "/home/b-it-bots/temp/robothon/BYOD"
         print("BYOD Action Initialized")
     
     def pre_perceive(self) -> bool:
@@ -82,6 +95,15 @@ class ByodAction(AbstractAction):
     def verify(self) -> bool:
         print ("in verify")
         return True
+    
+    def image_cb(self, msg):
+
+        # get the image from the message
+        try:
+            image = self.bridge.imgmsg_to_cv2(msg, "bgr8")
+        except CvBridgeError as e:
+            print(e)
+        self.image = image
 
     def get_poses_and_follow_trajactory(self):
 
@@ -362,6 +384,115 @@ class ByodAction(AbstractAction):
         rospy.loginfo(">> Reading multimeter screen <<")
         
         # read the screen and publish the value
-        # TODO: implement the screen reading and publishing the value
+        readings = self.multimeter_screen_ocr(save_debug_images=True)
+
+        # publish the value
+        if readings:
+            self.multimeter_value_pub.publish(readings)
+            rospy.loginfo(">> Multimeter value published <<")
+        else:
+            rospy.loginfo(">> Trying to read multimeter screen again <<")
     
         return True
+    
+    def multimeter_screen_ocr(self, save_debug_images=False):
+
+        if self.save_debug_images:
+            self.save_debug_images()
+
+        image_original = self.image.copy()
+        
+        # flip the image vertically
+        img = cv2.flip(image_original, 0)
+        # flip the image horizontally
+        flipped_image = cv2.flip(img, 1)
+
+        #ROI crop parameters
+        min_x = 520
+        max_x = 760
+        min_y = 470
+        max_y = 580
+
+        # # crop to ROI
+        image = self.image[min_y:max_y, min_x:max_x]
+
+        # flip the image vertically
+        image = cv2.flip(image, 0)
+        # flip the image horizontally
+        image = cv2.flip(image, 1)
+
+        # rotate the image little but anti-clockwise to make the numbers straight
+        image = self.rotate_image(image, 1)  # angle in degrees
+        image_original = image.copy()
+
+        # Convert image to grayscale
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+
+        # blur the image
+        blur = cv2.GaussianBlur(gray, (5, 5), 0)
+
+        # Apply threshold to get image with only black and white
+        thresh = cv2.threshold(
+            blur, 0, 255, cv2.THRESH_BINARY | cv2.THRESH_OTSU)[1]
+
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+        opening = cv2.morphologyEx(thresh, cv2.MORPH_OPEN, kernel, iterations=1)
+        invert = 255 - opening
+
+        # add padding to the image
+        invert = cv2.copyMakeBorder(
+            invert, 300, 300, 300, 300, cv2.BORDER_CONSTANT, value=255)
+
+        # resize to 640x480
+        invert = cv2.resize(invert, (640, 480))
+
+        # erode the image and dilate the image
+        kernel = np.ones((3, 3), np.uint8)
+        invert = cv2.erode(invert, kernel, iterations=1)
+        invert = cv2.dilate(invert, kernel, iterations=1)
+
+        config = ("-l eng --oem 3 --psm 6 -c tessedit_char_whitelist=0123456789")
+        result = pytesseract.image_to_string(invert, config=config)
+
+        # only keep the numbers
+        result = "".join([c for c in result if c.isdigit() or c == "."])
+
+        # print the result on the image
+        cv2.putText(flipped_image, str(result), (10, 30),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+
+        # publish the image
+        self.self.img_pub.publish(
+            self.bridge.cv2_to_imgmsg(flipped_image, "bgr8"))
+
+        return str(result)
+
+    def rotate_image(image, angle):
+
+        # grab the dimensions of the image and then determine the
+        # center
+        (h, w) = image.shape[:2]
+        (cX, cY) = ((w-1)/2.0, (h-1)/2.0)
+
+        # grab the rotation matrix (applying the negative of the
+        # angle to rotate clockwise), then grab the sine and cosine
+        # (i.e., the rotation components of the matrix)
+
+        # angle = -angle
+        M = cv2.getRotationMatrix2D((cX, cY), angle, 1.0)  # angle in degrees
+
+        # perform the actual rotation and return the image
+        return cv2.warpAffine(image, M, (w, h))
+    
+    def save_debug_images(self):
+
+        # get the current date and time
+        now = datetime.datetime.now()
+
+        # check if the directory exists
+        if not os.path.exists(self.save_debug_image_dir):
+            os.makedirs(self.save_debug_image_dir)
+
+        if self.image is not None:
+            cv2.imwrite(os.path.join(
+                self.save_debug_image_dir, 'BYOD_debug_image_{}.png'.format(now)), self.image)
