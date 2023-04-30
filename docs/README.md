@@ -43,9 +43,21 @@ The images below illustrate the blue and red filters, and the final result of th
 ## Task 3: Plug probe in test port
 ### Grasp plug
 
+To successfully grasp the plug from the board, the robotic arm first moves above the plug and then uses visual servoing to align itself with the plug. Once it is aligned, the arm moves down until it makes contact with the plug. The gripper is then closed to firmly grasp the plug. Finally, the arm moves back up, carefully holding the plug.
+
+The images below show the original image, thresholded mask image,  detected red circle (to align the arm), and final result of the visual servoing.
+
+<p float="left">
+  <img src="images/plug_remove/image_original.png" width="220" />
+  <img src="images/plug_remove/contour_mask.png" width="220" />
+  <img src="images/plug_remove/hough_circles.png" width="220" />
+  <img src="images/plug_remove/visual_servoing.png" width="220" />
+</p>
+
 ### Insert plug in test port
 To align with the red port, the robot first moves forward (with respect to its grasping position) for a fixed amount. To better align with the red port, visual servoing is performed using the ends of pairs of bolts on the board as targets.
 The bolts are detected by applying adaptive thresholding on a cropped greyscale image, detecting circles, and selecting circles of equal sizes with an expected distance between their centers.
+
 The images below show the original image, thresholded image, and the detected vertical (blue) and horizontal (green) pairs of circles. Red circles represent other detected circles which are rejected by the distance and pairing constraints.
 The vertical pair of circles are used to align along the horizontal axis, and the horizontal pair for alignment along the vertical axis.
 
@@ -79,7 +91,30 @@ After alignment, the arm is moved down until contact with the door knob and retr
 
 ### Grasp probe and probe circuit
 
-## Task 5: Wrap cable replace probe
+## Task 5: Wrap cable and re-place probe back in
+
+### Pick up wire
+
+<!-- - To successfully grasp the plug from the board, the robotic arm first moves above the plug and then uses visual servoing to align itself with the plug. Once it is aligned, the arm moves down until it makes contact with the plug. The gripper is then closed to firmly grasp the plug. Finally, the arm moves back up, carefully holding the plug. -->
+
+The robot arm moves above the wire to grasp it and then utilizes visual servoing to align itself with the wire. After successful alignment, the arm moves down and firmly grasps the wire by closing the gripper.
+
+
+<p float="left">
+  <img src="images/pick_wire/image_ROI_rectangle.jpg" width="250" />
+  <img src="images/pick_wire/image_canny.jpg" width="220" />
+  <img src="images/pick_wire/image_filtered_contours.jpg" width="220" />
+  <img src="images/pick_wire/visual_servoing.jpg" width="220" />
+</p>
+
+
+### Re-place probe back in
+
+When re-placing the probe back in, the robot arm is first moved on top of the probe. Then, an inference is performed to detect the probe holder using a [YOLOv5-based](https://github.com/ultralytics/yolov5) trained model. The model is available for use and can be found at [HERE](https://github.com/b-it-bots/robothon2023/tree/main/models/probe_holder_horizontal). Once the probe holder is detected, the arm performs visual servoing to align with the holder before proceeding further.
+
+<p float="left">
+  <img src="images/probe_holder/probe_holder_output.jpg" width="350" />
+</p>
 
 ## Task 6: Press stop trial button
 This task is identical to Task 1, with the exception that the robot aligns with and presses the red button to stop the trial.
