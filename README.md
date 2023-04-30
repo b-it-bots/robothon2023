@@ -193,6 +193,7 @@ At the end of the task, the probe is placed back in the holder in preparation fo
 
 The arm moves above the cable to grasp it and then utilizes visual servoing to align itself with the cable. After successful alignment, the arm moves down and firmly grasps the cable by closing the gripper. The cable is grasped such that it is above the foam, and the zip tie loops around it. This allows the cable to slide through the zip tie, and the foam prevents it from falling down through the fingers.
 
+The images below show the original image with the ROI rectangle, the Canny edge detection, the filtered contours, and the final result of the visual servoing.
 
 <p float="left">
   <img src="docs/images/pick_wire/image_ROI_rectangle.jpg" width="250" />
