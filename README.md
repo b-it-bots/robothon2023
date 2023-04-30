@@ -1,4 +1,4 @@
-# Robothon2023
+# b-it-bots Robothon® 2023 Team Report
 This repository contains the code and documentation of our approach used for the [Robothon® 2023 challenge](https://automatica-munich.com/en/munich-i/robothon/).
 
 Our team, b-it-bots, is from the Institute for AI and Autonomous Systems ([A<sup>2</sup>S](https://h-brs.de/en/a2s)) at Hochschule Bonn-Rhein-Sieg, Germany.
@@ -19,7 +19,8 @@ We use the 7-dof Kinova Gen3 with a Robotiq 2F-85 gripper. The arm comes with a 
 * [3D printed multimeter probe holder](docs/3d_models/probe_holder_v3.STL)
 
 <p float="left">
-  <img src="docs/images/platform/gripper_with_foam.jpg" width="250" />
+  <img src="https://user-images.githubusercontent.com/47410011/230381047-89bfc69f-f113-4c27-846f-17bbb7ae878f.jpg" width=23% />
+  <img src="docs/images/platform/gripper_with_foam.jpg" width="280" />
   <img src="docs/images/platform/probe_holder.jpg" width="250" />
 </p>
 
@@ -169,11 +170,11 @@ The images below illustrate the result of the Canny edge detection, contour dete
   <img src="docs/images/door/contours.jpg" width="250" />
   <img src="docs/images/door/result.jpg" width="250" />
 </p>
-The robot arm is aligned with the door knob using [visual servoing](#visual-servoing).
+The robot arm is aligned with the door knob using visual servoing.
 
 After alignment, the arm is moved down until contact with the door knob and retracted up to grasp the door knob. The door is opened by following a predefined trajectory, and the arm is retracted back to a safe position position.
 #### Grasp and stow the probe
-Due to the configuration of the gripper and camera, it is necessary to grasp the probe parallel to the fingers, instead of perpendicular to them. Therefore, the probe is removed from the board, and placed in the 3D printed holder on the table.
+Due to the configuration of the gripper and camera, it is necessary to grasp the probe parallel to the fingers, instead of perpendicular to them. Therefore, the probe is removed from the board, and placed in the [3D printed holder](docs/3d_models/probe_holder_v3.STL), which is at a fixed location on the table.
 
 #### Grasp probe and probe circuit
 The probe is re-grasped such that it is parallel to the gripper fingers and moved to a position above the circuit to be probed.
@@ -186,11 +187,11 @@ Visual servoing is performed at this location, using as a target the orange squa
 Once aligned, the probe is moved downwards at a slow velocity, and a height and force threshold is used to determine if the circuit was successfully probed. In case of a failure, the probed is moved back up, and probing is retried after realignment.
 At the end of the task, the probe is placed back in the holder in preparation for wrapping the cable.
 
-#### Task 5: Wrap cable replace probe
+### Task 5: Wrap cable replace probe
 
-### Pick up cable
+#### Pick up cable
 
-The arm moves above the cable to grasp it and then utilizes visual servoing to align itself with the cable. After successful alignment, the arm moves down and firmly grasps the cable by closing the gripper.
+The arm moves above the cable to grasp it and then utilizes visual servoing to align itself with the cable. After successful alignment, the arm moves down and firmly grasps the cable by closing the gripper. The cable is grasped such that it is above the foam, and the zip tie loops around it. This allows the cable to slide through the zip tie, and the foam prevents it from falling down through the fingers.
 
 
 <p float="left">
@@ -200,9 +201,12 @@ The arm moves above the cable to grasp it and then utilizes visual servoing to a
   <img src="docs/images/pick_wire/visual_servoing.jpg" width="220" />
 </p>
 
-### Re-place probe in board
+#### Wrap cable
+Once the cable is grasped, the arm follows a pre-defined trajectory (with respect to the origin of the board) to wrap the cable around the two holders on the board. It is necessary for the cable to slide through the fingers during the trajectory, which is made possible by the zip tie being looped around it. Although this approach works if the cable is grasped correctly, it still leads to uncertain results. In our initial approach, we used the grooves in the foam to allow sliding and grasping as necessary; this approach was also not robust enough, in part because the foam degraded over time.
 
-When re-placing the probe back in the board, the arm is first moved above the location of the probe holder. Then, an inference is performed to detect the probe holder using a [YOLOv5-based](https://github.com/ultralytics/yolov5) trained model. The model is available for use and can be found at [here](models/probe_holder_horizontal). Once the probe holder is detected, the arm performs visual servoing to align with the holder before proceeding further.
+#### Re-place probe in board
+
+When re-placing the probe back in the board, the arm is first moved above the location of the probe holder. Then, an inference is performed to detect the probe holder using a [YOLOv5-based](https://github.com/ultralytics/yolov5) trained model. The model is available for use and can be found at [here](models/probe_holder_horizontal). Once the probe holder is detected, the arm performs visual servoing to align with the holder. The aligned pose is saved before the arm grasps the probe from the 3D printed holder on the table (such that it is again perpendicular to the fingers), and approaches the previously saved pose. The probe is inserted in its holder by slowly approaching it using velocity control, and stopped based on force and distance thresholds.
 
 <p float="left">
   <img src="docs/images/probe_holder/probe_holder_output.jpg" width="350" />
@@ -221,20 +225,24 @@ For several tasks, the robot arm needs to be accurately aligned with parts of th
 
 Visual servoing is only performed in the X-Y plane, and depending on the task we have a target element which we align to (e.g. the red port, door knob, etc.). For the task, we define the target position for the selected element, and move the arm in velocity control mode until the selected element is at the target position.
 
+<p float="left">
+  <img src="docs/images/plug_insert/red_port_vs.gif" width="250" />
+</p>
+
 ### Task sequence
-An abstract class with the methods `pre_perceive`, `act` and `verify` is used as the base class for the implementation of each task. Each task therefore implements the three methods, with the main execution defined in the `act` method. A top-level script executes each task in sequence. The sequence of tasks can be changed via a ROS parameter (defined in [this](config/task_params.yaml) yaml file), allowing testing of individual tasks, and different sequences of tasks. All tasks depend on the localization of the board; therefore the top-level script first coordinates detection of the board before executing the task sequence.
+An abstract class with the methods `pre_perceive`, `act` and `verify` is used as the base class for the implementation of each task. Each task therefore implements the three methods, with the main execution defined in the `act` method. A top-level script executes each task in sequence. The sequence of tasks can be changed via a ROS parameter (defined in [this](config/task_params.yaml) yaml file), allowing testing of individual tasks, and different sequences of tasks. All tasks depend on the localization of the board; therefore the top-level script first coordinates detection of the board before executing the task sequence. We would like to replace this implementation with a behaviour tree in the future to allow for more complex sequencing.
 
 ### Predefined trajectories
 The `kortex_driver` accepts a sequence of Cartesian waypoints, and generates a trajectory through the waypoints with an optional blending radius. Cartesian waypoints are recorded with respect to the origin of the board for opening the door, and for winding the cable. At run time, the recorded waypoints are transformed with respect to the new origin of the board, and executed.
 
 ### Graphical user interface
-To ease recording and replaying poses and trajectories a graphical user interface was developed. A more detailed description can be found in the [docs](docs/gui.md)
+To ease recording and replaying poses and trajectories a graphical user interface was developed. A more detailed description can be found in the [docs](docs/gui.md).
 
 ## Assumptions
 Our software makes several implicit assumptions about the task, environment (including the board), the arm and the camera. We list some such assumptions below, which could cause a task failure if they don't hold true.
 
 * The layout and dimensions of the board are identical to the one which we used. If any of the elements are moved significantly, most tasks would likely fail. Small changes in position would be less likely to cause task failures, since we use visual servoing in most cases.
-* The initial state of the board is correct.
+* The initial state of the board is correct; i.e. the slider, plug, probe and door are all in their correct initial states.
 * The red and blue buttons of the task board are in view of the camera at the initial pose of the arm. There is no failure recovery mechanism in case the buttons are not found.
 * No other red/blue circle pairs are present in the view of the camera. If there are multiple pairs which match our criteria (e.g. roughly equal radius), we select the pair which are closest to each other. An improvement would be to verify whether other elements on the board align with our belief of the buttons' location.
 * The camera is at a sufficient distance from the board, such that a point cloud is available at the location of the buttons. Since we rely on the 3D point cloud to retrieve the 3D pose of the buttons, the distance between the camera and the board needs to be within the depth range of the camera.

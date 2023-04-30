@@ -1,4 +1,7 @@
 #  GUI for debugging
+<p float="center">
+  <img src="images/gui/gui.jpg" width="600" />
+</p>
 
 To allow for intuitive and interactive debugging of the robot movements and poses, a GUI was developed. The GUI is written in Python and uses the Tkinter library.
 
