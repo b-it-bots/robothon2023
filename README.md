@@ -38,11 +38,13 @@ We use Ubuntu 20.04 / Pop! OS 20.04 as the operating system, with ROS Noetic for
 
 ### Additional Python dependencies
 Apart from standard Python packages and the ROS Python packages, the following packages are needed (can be installed via `pip3 install`:
+- opencv-python
 - scipy
 - PyQt5
 - yolov5
 - Tkinter
 - Pyperclip
+- pytesseract
 
 ## Setup the robot
 
