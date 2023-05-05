@@ -524,7 +524,7 @@ class ProbeAction(AbstractAction):
     def probe_circuit(self):
         kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name="probe_circuit_link",
                                                                       target_frame_name="base_link",
-                                                                      offset_linear=[0.0, 0.0, 0.2],
+                                                                      offset_linear=[0.0, 0.0, 0.3],
                                                                       offset_rotation_euler=[math.pi, 0.0, math.pi/2])
         self.arm.send_cartesian_pose(kinova_pose)
 
@@ -539,6 +539,12 @@ class ProbeAction(AbstractAction):
             retries += 1
             if retries > max_probe_retries:
                 break
+        
+        # moving to safe height to avoid hitting the door
+        current_pose = self.arm.get_current_pose()
+        current_pose.z += 0.06
+        self.arm.send_cartesian_pose(current_pose)
+        
         return probed
 
 
@@ -840,8 +846,8 @@ class ProbeAction(AbstractAction):
             return None, None
 
     def get_orange_mask(self, img):
-        lower = np.array([80, 120, 140])
-        upper = np.array([120, 255, 255])
+        lower = np.array([91, 120, 140])
+        upper = np.array([111, 255, 255])
         mask = cv2.inRange(img, lower, upper)
         mask = dilate(mask)
         mask = erode(mask)
@@ -858,8 +864,8 @@ class ProbeAction(AbstractAction):
         ## set at height of 0.3 m (i.e tool_pose_z = 0.3)
         ## if the probe ends up too far to the bottom, increase target_y
         ## if the probe ends up too far to the right, increase target_x
-        target_x = 640
-        target_y = 485
+        target_x = 634
+        target_y = 487
         if self.image is None:
             return None, None
         (height, width, c) = self.image.shape
