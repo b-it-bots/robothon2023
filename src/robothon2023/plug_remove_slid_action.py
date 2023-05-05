@@ -515,8 +515,8 @@ class PlugRemoveSlidAction(AbstractAction):
         ## These are targets when tool_pose_z = approx 0.148 m
         ## if robot ends up too far back, increase target_y
         ## if robot ends up too far right, increase target_x
-        target_x = 566
-        target_y = 318
+        target_x = 558
+        target_y = 320
         color_img = self.image[min_y:max_y, min_x:max_x]
         img = cv2.cvtColor(color_img, cv2.COLOR_BGR2GRAY)
         mask = cv2.GaussianBlur(img, (3, 3), sigmaX=33)
