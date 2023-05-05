@@ -39,11 +39,12 @@ class ButtonPressAction(AbstractAction):
         rospy.loginfo('[%s] pre-preceive' % self.__class__.__name__)
 
         pre_height_above_button = rospy.get_param("~pre_height_above_button", 0.02)
-        if 'red_button' not in self.button_reference_frame:
+        if 'red_button' in self.button_reference_frame:
+            x_offset = 0.01
+            pre_height_above_button += 0.07 # moving to safe height to avoid hitting the door
+        else:
             pre_height_above_button -= 0.02
             x_offset = 0.0
-        else:
-            x_offset = 0.01
         kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name=self.button_reference_frame,
                                                                       target_frame_name="base_link",
                                                                       offset_linear=[x_offset, 0.005, pre_height_above_button],
@@ -52,7 +53,7 @@ class ButtonPressAction(AbstractAction):
         self.arm.send_cartesian_pose(kinova_pose)
         self.arm.execute_gripper_command(1.0)
         if 'red_button' in self.button_reference_frame:
-            kinova_pose.z -= 0.02
+            kinova_pose.z -= 0.09 # moving to safe height to avoid hitting the door
             self.arm.send_cartesian_pose(kinova_pose)
         return True
 
