@@ -41,7 +41,7 @@ class ByodAction(AbstractAction):
         # same topic as other debug images
         self.img_pub = rospy.Publisher('/visual_servoing_debug_img', Image, queue_size=10)
         self.multimeter_value_pub = rospy.Publisher('/multimeter_value', String, queue_size=10)
-        self.save_debug_images_dir = "/home/b-it-bots/temp/robothon/BYOD"
+        self.save_debug_image_dir = "/home/b-it-bots/temp/robothon/BYOD"
         print("BYOD Action Initialized")
     
     def pre_perceive(self) -> bool:
@@ -269,7 +269,7 @@ class ByodAction(AbstractAction):
 
         # go down
         rospy.sleep(0.5) # for the arm to stabilize
-        success = self.arm.move_down_with_caution(force_threshold=[3,3,3.5], tool_z_thresh=0.045, velocity=0.01,retract=True, retract_dist=0.006)
+        success = self.arm.move_down_with_caution(force_threshold=[3,3,4.5], tool_z_thresh=0.045, velocity=0.01,retract=True, retract_dist=0.006)
         if not success:
             return False
         success = self.arm.stop_arm_velocity()
@@ -338,7 +338,7 @@ class ByodAction(AbstractAction):
 
             # approach and press button 
         rospy.sleep(0.5) # for the arm to stabilize
-        success = self.arm.move_down_with_caution(force_threshold=[4.0,4.0,5.0], tool_z_thresh=0.045, velocity=0.008,retract=True, retract_dist=0.015)
+        success = self.arm.move_down_with_caution(force_threshold=[4.0,4.0,7.0], tool_z_thresh=0.040, velocity=0.008,retract=True, retract_dist=0.015)
         if not success:
             return False
         
@@ -364,7 +364,7 @@ class ByodAction(AbstractAction):
 
             # approach and press button 
         rospy.sleep(0.5) # for the arm to stabilize
-        success = self.arm.move_down_with_caution(force_threshold=[4.0,4.0,5.0], tool_z_thresh=0.045, velocity=0.008,retract=True, retract_dist=0.015)
+        success = self.arm.move_down_with_caution(force_threshold=[4.0,4.0,7.0], tool_z_thresh=0.045, velocity=0.008,retract=True, retract_dist=0.015)
         if not success:
             return False
         
@@ -462,12 +462,12 @@ class ByodAction(AbstractAction):
                     cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
 
         # publish the image
-        self.self.img_pub.publish(
-            self.bridge.cv2_to_imgmsg(flipped_image, "bgr8"))
+        self.img_pub.publish(
+            self.bridge.cv2_to_imgmsg(invert, "mono8"))
 
         return str(result)
 
-    def rotate_image(image, angle):
+    def rotate_image(self, image, angle):
 
         # grab the dimensions of the image and then determine the
         # center
