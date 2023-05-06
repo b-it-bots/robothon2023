@@ -1,6 +1,7 @@
 <?xml version="1.0"?>
 
 <launch>
+    <param name="/board_height" type="double" value="0.1157" />
     <node pkg="robothon2023" type="task_sm.py" name="task_sm" output="screen">
         <rosparam command="load" file="$(find robothon2023)/config/boundary_safety.yaml"/>
         <rosparam command="load" file="$(find robothon2023)/config/task_params.yaml"/>

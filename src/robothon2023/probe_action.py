@@ -864,8 +864,8 @@ class ProbeAction(AbstractAction):
         ## set at height of 0.3 m (i.e tool_pose_z = 0.3)
         ## if the probe ends up too far to the bottom, increase target_y
         ## if the probe ends up too far to the right, increase target_x
-        target_x = 634
-        target_y = 487
+        target_x = 640
+        target_y = 495
         if self.image is None:
             return None, None
         (height, width, c) = self.image.shape

@@ -161,7 +161,7 @@ class SliderAction(AbstractAction):
         Move arm to along slider in with velocity vector
         """
 
-        offset = 0.06
+        offset = 0.1
         rospy.loginfo("slider pose below")
         print(self.slider_pose)
         slider_pose = self.rotate_Z_down(self.slider_pose)

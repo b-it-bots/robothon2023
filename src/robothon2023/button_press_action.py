@@ -43,7 +43,7 @@ class ButtonPressAction(AbstractAction):
             x_offset = 0.01
             pre_height_above_button += 0.07 # moving to safe height to avoid hitting the door
         else:
-            pre_height_above_button -= 0.02
+            pre_height_above_button += 0.02
             x_offset = 0.0
         kinova_pose = self.transform_utils.transform_pose_frame_name(reference_frame_name=self.button_reference_frame,
                                                                       target_frame_name="base_link",
@@ -53,7 +53,10 @@ class ButtonPressAction(AbstractAction):
         self.arm.send_cartesian_pose(kinova_pose)
         self.arm.execute_gripper_command(1.0)
         if 'red_button' in self.button_reference_frame:
-            kinova_pose.z -= 0.09 # moving to safe height to avoid hitting the door
+            kinova_pose.z -= 0.09
+            self.arm.send_cartesian_pose(kinova_pose)
+        else:
+            kinova_pose.z -= 0.04
             self.arm.send_cartesian_pose(kinova_pose)
         return True
 

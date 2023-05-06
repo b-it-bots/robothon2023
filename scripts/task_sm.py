@@ -69,8 +69,14 @@ class TaskSM(object):
             rospy.logerr('Board detection failed')
             exit(0)
 
+        reordered_task = False
+        if len(self.task_order) == 6 and self.task_order != [0, 1, 2, 3, 4, 5]:
+            reordered_task = True
+            rospy.loginfo('Task order has changed!')
         for task_id in self.task_order:
             success = self.action_executors[task_id].do()
+            if reordered_task:
+                self.move_arm_to_perceive_board()
             if not success:
                 rospy.logerr('%s action failed' % self.action_executors[task_id].__class__.__name__)
         # after we finish all tasks, move back to perceive board

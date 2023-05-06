@@ -5,13 +5,16 @@
 # 4: wrap cable
 # 5: stop
 task_order: [0, 1, 2, 3, 4, 5]
+# task_order: [2, 3, 0, 4, 5, 1]
+# task_order: [4]
+
 debug: true
 pre_height_above_button: 0.08
 linear_vel_z: 0.01 # positive going up, negative going down; NOTE: changing this affects force_z_diff_threshold. Low velocities are more stable
 force_z_diff_threshold: 3.0 # if diff between current force and mean force is greater, stop
 # plug insertion
 plug_insertion_height_threshold: 0.125 # if we go below this height, we've inserted the plug
-max_insert_retries: 5 # number of times to retry inserting plug if we don't succeed
+max_insert_retries: 10 # number of times to retry inserting plug if we don't succeed
 # probing circuit
 max_probe_retries: 5 # number of times we try to probe the circuit
 
