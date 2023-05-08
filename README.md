@@ -250,3 +250,25 @@ Our software makes several implicit assumptions about the task, environment (inc
 * No other red/blue circle pairs are present in the view of the camera. If there are multiple pairs which match our criteria (e.g. roughly equal radius), we select the pair which are closest to each other. An improvement would be to verify whether other elements on the board align with our belief of the buttons' location.
 * The camera is at a sufficient distance from the board, such that a point cloud is available at the location of the buttons. Since we rely on the 3D point cloud to retrieve the 3D pose of the buttons, the distance between the camera and the board needs to be within the depth range of the camera.
 
+# Bring Your Own Devices (BYOD)
+
+## Setup
+
+TODO: add setup images
+
+## Task description
+
+TODO: add task description
+
+## Requirements
+
+  1. In terminal, run `export TESSDATA_PREFIX="<folder-path-to-the-trained-model>"`
+
+## Launch
+
+TODO: steps to launch the task
+
+## References
+
+<i>LCD-OCR</i>. (n.d.). <i>LCD-OCR</i>. Retrieved May 8, 2023, from https://github.com/DevashishPrasad/LCD-OCR
+
