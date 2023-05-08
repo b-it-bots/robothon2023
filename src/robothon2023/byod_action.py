@@ -338,7 +338,7 @@ class ByodAction(AbstractAction):
 
             # approach and press button 
         rospy.sleep(0.5) # for the arm to stabilize
-        success = self.arm.move_down_with_caution(force_threshold=[4.0,4.0,7.0], tool_z_thresh=0.040, velocity=0.008,retract=True, retract_dist=0.015)
+        success = self.arm.move_down_with_caution(force_threshold=[4.0,4.0,12.0], tool_z_thresh=0.040, velocity=0.008,retract=True, retract_dist=0.015)
         if not success:
             return False
         
@@ -364,7 +364,7 @@ class ByodAction(AbstractAction):
 
             # approach and press button 
         rospy.sleep(0.5) # for the arm to stabilize
-        success = self.arm.move_down_with_caution(force_threshold=[4.0,4.0,7.0], tool_z_thresh=0.045, velocity=0.008,retract=True, retract_dist=0.015)
+        success = self.arm.move_down_with_caution(force_threshold=[4.0,4.0,12.0], tool_z_thresh=0.045, velocity=0.008,retract=True, retract_dist=0.015)
         if not success:
             return False
         
@@ -390,6 +390,7 @@ class ByodAction(AbstractAction):
         if readings:
             self.multimeter_value_pub.publish(readings)
             rospy.loginfo(">> Multimeter value published <<")
+            rospy.loginfo(readings)
         else:
             rospy.loginfo(">> Trying to read multimeter screen again <<")
     
@@ -409,7 +410,7 @@ class ByodAction(AbstractAction):
 
         #ROI crop parameters
         min_x = 520
-        max_x = 760
+        max_x = 756
         min_y = 470
         max_y = 580
 
@@ -451,7 +452,8 @@ class ByodAction(AbstractAction):
         invert = cv2.erode(invert, kernel, iterations=1)
         invert = cv2.dilate(invert, kernel, iterations=1)
 
-        config = ("-l eng --oem 3 --psm 6 -c tessedit_char_whitelist=0123456789")
+        # config = ("-l eng --oem 3 --psm 6 -c tessedit_char_whitelist=0123456789")
+        config = ("-l ssd -c tessedit_char_whitelist=0123456789")
         result = pytesseract.image_to_string(invert, config=config)
 
         # only keep the numbers
